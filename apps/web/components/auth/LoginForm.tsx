@@ -27,6 +27,7 @@ interface Props {
 export function LoginForm({ isLoading, error, setError, setIsLoading }: Props) {
   const router = useRouter()
   const setUser = useStore((s) => s.setUser)
+  const setJustLoggedOut = useStore((s) => s.setJustLoggedOut)
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -67,6 +68,7 @@ export function LoginForm({ isLoading, error, setError, setIsLoading }: Props) {
         return
       }
 
+      setJustLoggedOut(false)
       setUser({
         ...data.user,
         // Sprint 7 B-AUTH-1 (2026-07-23): defense in depth — fall back to

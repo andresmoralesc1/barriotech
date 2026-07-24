@@ -643,3 +643,105 @@ test('Sprint 10 C.3: Sentry wiring comment visible in .env.example', async () =>
   assert.match(envExample, /SENTRY_DSN/, 'should document SENTRY_DSN in .env.example')
   assert.match(envExample, /Sentry/, 'should mention Sentry by name in .env.example')
 })
+
+// --- Sprint 11 B-AUTH-4: logout regression tests ----------------
+
+test('Sprint 11 B-AUTH-4: POST /api/auth/logout clears cookies', async () => {
+  // Login first
+  const u = await setupTestUser({ role: 'seller' })
+  const loginRes = await fetch(`${BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier: u.email, password: u.password }),
+  })
+  assert.equal(loginRes.status, 200, 'login should succeed')
+  const setCookie = loginRes.headers.get('set-cookie') || ''
+  assert.ok(setCookie.includes('token='), 'login should set token cookie')
+  assert.ok(setCookie.includes('refresh-token='), 'login should set refresh-token cookie')
+
+  // Logout using the cookies from login
+  const cookieHeader = setCookie.split(';')[0]
+  const logoutRes = await fetch(`${BASE}/api/auth/logout`, {
+    method: 'POST',
+    headers: { Cookie: cookieHeader },
+  })
+  assert.equal(logoutRes.status, 200, 'logout should return 200')
+  const logoutData = await logoutRes.json()
+  assert.equal(logoutData.success, true, 'logout should report success')
+  const logoutSetCookie = logoutRes.headers.get('set-cookie') || ''
+  // The cookie should be cleared (Max-Age=0 or expires in the past)
+  assert.ok(
+    logoutSetCookie.includes('token=') && (logoutSetCookie.includes('Max-Age=0') || logoutSetCookie.includes('expires=Thu, 01 Jan 1970')),
+    'logout should clear the token cookie'
+  )
+})
+
+test('Sprint 11 B-AUTH-4: /api/auth/me returns 401 after logout', async () => {
+  // Login, capture cookie, logout, then /api/auth/me should 401
+  const u = await setupTestUser({ role: 'seller' })
+  const loginRes = await fetch(`${BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier: u.email, password: u.password }),
+  })
+  const cookieHeader = (loginRes.headers.get('set-cookie') || '').split(';')[0]
+
+  // Verify we can hit /me
+  const meRes1 = await fetch(`${BASE}/api/auth/me`, {
+    headers: { Cookie: cookieHeader },
+  })
+  assert.equal(meRes1.status, 200, 'before logout /me should be 200')
+
+  // Logout
+  await fetch(`${BASE}/api/auth/logout`, {
+    method: 'POST',
+    headers: { Cookie: cookieHeader },
+  })
+
+  // /me should now 401 (cookie is cleared)
+  // We send the OLD cookie header which would be expired anyway, but
+  // the real test is that the server rejects it.
+  const meRes2 = await fetch(`${BASE}/api/auth/me`, {
+    headers: { Cookie: cookieHeader },
+  })
+  // The cookie's Max-Age=0 means the browser would have removed it,
+  // so on the client side there's no cookie to send. The server's
+  // /me would then return 401 because no token is present. With the
+  // old cookie header still attached, the server should also reject
+  // (token_version was bumped on logout, so the cached JWT is invalid).
+  assert.ok([401, 403].includes(meRes2.status),
+    `after logout /me should be 401 or 403, got ${meRes2.status}`)
+})
+
+test('Sprint 11 B-AUTH-4: /api/auth/refresh after logout returns 401', async () => {
+  // Once logout bumps the token_version, the refresh token is also
+  // invalidated. /api/auth/refresh should 401.
+  const u = await setupTestUser({ role: 'seller' })
+  const loginRes = await fetch(`${BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier: u.email, password: u.password }),
+  })
+  const cookieHeader = (loginRes.headers.get('set-cookie') || '').split(';')[0]
+
+  // Verify refresh works pre-logout
+  const refresh1 = await fetch(`${BASE}/api/auth/refresh`, {
+    method: 'POST',
+    headers: { Cookie: cookieHeader },
+  })
+  assert.equal(refresh1.status, 200, 'refresh should work before logout')
+
+  // Logout
+  await fetch(`${BASE}/api/auth/logout`, {
+    method: 'POST',
+    headers: { Cookie: cookieHeader },
+  })
+
+  // Refresh should now 401
+  const refresh2 = await fetch(`${BASE}/api/auth/refresh`, {
+    method: 'POST',
+    headers: { Cookie: cookieHeader },
+  })
+  assert.equal(refresh2.status, 401,
+    `after logout /api/auth/refresh should be 401, got ${refresh2.status}`)
+})

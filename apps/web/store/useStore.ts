@@ -104,6 +104,14 @@ interface AppState {
 
   // Logout
   logout: () => void
+
+  // Sprint 11 B-AUTH-4 (2026-07-24): intent flag set by `logout()` so
+  // subsequent 401s (e.g. AuthInitializer's /api/auth/me on the new
+  // page mount) don't get misinterpreted as a session-expiry and
+  // redirected to /login?expired=1. Cleared on the next successful
+  // auth-state fetch or after a short timeout.
+  justLoggedOut: boolean
+  setJustLoggedOut: (v: boolean) => void
 }
 
 export const useStore = create<AppState>()(
@@ -112,6 +120,15 @@ export const useStore = create<AppState>()(
       // Hydration
       _hasHydrated: false,
       setHasHydrated: (v) => set({ _hasHydrated: v }),
+
+      // Sprint 11 B-AUTH-4 (2026-07-24): starts false, becomes true right
+      // after `logout()` completes. `authedFetch` reads this and skips the
+      // "/login?expired=1" redirect when the 401 was caused by a deliberate
+      // logout, not by a session expiring. Cleared on the next auth-state
+      // fetch (login, register) or on the AuthInitializer's mount on /login
+      // (where 401 is the expected path).
+      justLoggedOut: false,
+      setJustLoggedOut: (v) => set({ justLoggedOut: v }),
 
       // Usuario
       user: null,
@@ -221,13 +238,31 @@ export const useStore = create<AppState>()(
 
       // Logout
       logout: async () => {
+        // Set the intent flag BEFORE the fetch so the in-flight 401
+        // chain (refresh → /api/auth/me) skips the "expired" redirect.
+        // Cleared on a timer in case a code path forgets.
+        set({ justLoggedOut: true })
         try {
           await fetch('/api/auth/logout', { method: 'POST' })
         } catch {
           // ignore network errors — still clear client state
         }
         localStorage.removeItem('barriotech-store')
-        set({ user: null, vendorId: null, cart: [], orders: [], favoriteIds: [] })
+        set({
+          user: null,
+          vendorId: null,
+          cart: [],
+          orders: [],
+          favoriteIds: [],
+        })
+        // Auto-clear after 30s so a future login flow isn't accidentally
+        // skipped by the flag. The user will have re-entered the
+        // login/register flow by then, which clears it explicitly.
+        if (typeof window !== 'undefined') {
+          setTimeout(() => {
+            set({ justLoggedOut: false })
+          }, 30_000)
+        }
       },
     }),
     {

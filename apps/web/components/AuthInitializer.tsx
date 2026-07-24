@@ -27,6 +27,13 @@ export function AuthInitializer({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false)
   const setUser = useStore((s) => s.setUser)
   const setHasHydrated = useStore((s) => s.setHasHydrated)
+  // Sprint 11 B-AUTH-4 (2026-07-24): if we landed on a page that
+  // expected 401 (i.e. /login), clear justLoggedOut so future logins
+  // are intercepted by the normal flow. This also handles the case
+  // where a user logs out and the AuthInitializer's fetch lands before
+  // the SiteHeader's `handleLogout` redirect completes.
+  const setJustLoggedOut = useStore((s) => s.setJustLoggedOut)
+  const justLoggedOut = useStore((s) => s.justLoggedOut)
 
   useEffect(() => {
     // If store already hydrated in a prior render, we're good
@@ -40,14 +47,36 @@ export function AuthInitializer({ children }: { children: React.ReactNode }) {
     authedFetch('/api/auth/me')
       .then((res) => (res.ok ? res.json() : null))
       .then((user) => {
-        if (user) setUser(user)
+        if (user) {
+          setUser(user)
+          // Successful /api/auth/me after a logout means the user is
+          // re-registered or the cookie wasn't actually cleared. Either
+          // way, the justLoggedOut flag is no longer meaningful.
+          if (justLoggedOut) setJustLoggedOut(false)
+        }
       })
       .catch(() => { /* not logged in */ })
       .finally(() => {
         setHasHydrated(true)
         setReady(true)
+        // Sprint 11 B-AUTH-4 (2026-07-24): on /login or /register, the
+        // 401 is the expected path. Clear justLoggedOut so a future
+        // authedFetch can correctly redirect on a real session expiry.
+        if (typeof window !== 'undefined') {
+          const p = window.location.pathname
+          if (p === '/login' || p === '/register') {
+            setJustLoggedOut(false)
+          }
+          // Clean up the ?logged_out=1 query param the SiteHeader added
+          // on logout, so the URL bar doesn't carry it after the user
+          // landed on '/'. We use replaceState (not pushState) so the
+          // back button doesn't restore the logged_out state.
+          if (new URLSearchParams(window.location.search).get('logged_out') === '1') {
+            window.history.replaceState(null, '', window.location.pathname)
+          }
+        }
       })
-  }, [setUser, setHasHydrated])
+  }, [setUser, setHasHydrated, setJustLoggedOut, justLoggedOut])
 
   if (!ready) {
     return (

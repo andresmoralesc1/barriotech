@@ -42,6 +42,10 @@ export function RegisterForm({
 }: Props) {
   const router = useRouter()
   const setUser = useStore((s) => s.setUser)
+  // Sprint 11 B-AUTH-4 (2026-07-24): clear the justLoggedOut flag on
+  // register so a successful register doesn't get intercepted by a
+  // stale "don't redirect on 401" flag from a prior session.
+  const setJustLoggedOut = useStore((s) => s.setJustLoggedOut)
 
   const [fullName, setFullName] = useState('')
   const [contact, setContact] = useState('')
@@ -113,6 +117,7 @@ export function RegisterForm({
         return
       }
 
+      setJustLoggedOut(false)
       setUser({
         ...data.user,
         // Sprint 7 B-AUTH-1 (2026-07-23): the register response puts
