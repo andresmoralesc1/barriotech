@@ -18,7 +18,7 @@ export function SiteHeader() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const { user, _hasHydrated } = useStore()
+  const { user, _hasHydrated, logout: storeLogout, setJustLoggedOut } = useStore()
   const pathname = usePathname()
 
   // Hide the redundant "Ingresar" / "Registrarme" buttons when user is already on those pages
@@ -41,8 +41,29 @@ export function SiteHeader() {
   }, [userMenuOpen])
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
-    window.location.href = '/'
+    // Sprint 11 B-AUTH-4 (2026-07-24): the previous implementation
+    // redirected via `window.location.href = '/'`, which triggered a full
+    // page load. During that load, the AuthInitializer mounts and fires
+    // /api/auth/me, which 401s. With no logged-in cookie, the refresh
+    // also 401s, and the authedFetch would race the page navigation to
+    // redirect to /login?expired=1 — even though the user explicitly
+    // clicked "Cerrar sesión".
+    //
+    // Solution: use `window.location.replace('/?logged_out=1')` so the
+    // page navigates with a query param that tells the AuthInitializer
+    // (and any in-flight 401 handler) "this is a deliberate logout, do
+    // not redirect to ?expired=1". After navigation, replace the URL
+    // with a clean one so the param doesn't linger in the user's URL
+    // bar or browser history.
+    setJustLoggedOut(true)
+    await storeLogout()
+    const target = '/?logged_out=1'
+    window.location.replace(target)
+    // Note: the replaceState below is best-effort. If the browser blocks
+    // it (e.g. on the initial about:blank doc), the param stays in the
+    // URL until the user navigates again. authedFetch clears the flag
+    // after the AuthInitializer runs, so future requests in this session
+    // behave normally.
   }
 
   const isLoggedIn = _hasHydrated && !!user

@@ -79,6 +79,23 @@ export async function authedFetch(
     // Best-effort clear. If the user lands on /login because of a network
     // blip they can retry; we don't want a false positive to lock them out.
     useStore.getState().setUser(null)
+
+    // Sprint 11 B-AUTH-4 (2026-07-24): if the 401 was caused by a
+    // deliberate logout, don't redirect to /login?expired=1. Two
+    // signals feed this check:
+    //   1. The Zustand justLoggedOut flag set by storeLogout().
+    //   2. A `?logged_out=1` query param the SiteHeader adds when it
+    //      navigates to '/'. This is the more reliable signal because
+    //      the page navigation can race with the in-flight 401 chain
+    //      (NotificationBell polling, AuthInitializer) and the new page
+    //      has a fresh module instance.
+    const justLoggedOut = useStore.getState().justLoggedOut
+    const fromLogout = typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('logged_out') === '1'
+    if (justLoggedOut || fromLogout) {
+      return res
+    }
+
     if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
       window.location.href = '/login?expired=1'
     }
