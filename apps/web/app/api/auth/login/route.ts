@@ -168,6 +168,10 @@ export async function POST(req: NextRequest) {
         // extra /api/auth/me round-trip.
         emailVerified: user.email_verified,
       }
+    }, {
+      // Auth responses must not be cached anywhere — a cached Set-Cookie
+      // header can be replayed by a shared cache or browser back/forward.
+      headers: { 'Cache-Control': 'no-store' },
     })
 
     const isProd = process.env.NODE_ENV === 'production'

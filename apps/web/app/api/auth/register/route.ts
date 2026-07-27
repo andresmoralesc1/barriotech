@@ -6,12 +6,7 @@ import { COLOMBIA_CITIES } from '@/lib/core/constants'
 import { signTokenSync } from '@/lib/auth'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { getClientIp } from '@/lib/trusted-ip'
-// Email verification temporarily disabled (2026-07-22) — feature-paused, NOT deleted.
-// To re-enable: uncomment the imports below + the `Email verification` block
-// after the COMMIT, AND flip the `email_verified` literal back to `false` in
-// the INSERT, AND restore the `emailVerified: false, requiresEmailVerification: true`
-// fields in the JSON response.
-// import { issueEmailVerificationToken, sendVerificationEmail } from '@/lib/email'
+import { issueEmailVerificationToken, sendVerificationEmail } from '@/lib/email'
 import { generateUniqueSlug } from '@/lib/vendor-slug'
 import {
   isEmail,
@@ -19,21 +14,9 @@ import {
   normalizeEmail,
   normalizePhone,
 } from '@/lib/auth-helpers'
+import { isCommonPassword } from '@/lib/common-passwords'
+import { sanitizeDisplayName } from '@/lib/sanitize'
 import { parseJsonBody } from '@/lib/parse-json'
-
-// Top-50 most common passwords leaked in credential dumps. Lowercase; we
-// compare against password.toLowerCase(). Source: SecLists top-100, trimmed
-// to remove entries >32 chars (already blocked by min-length=8).
-const COMMON_PASSWORDS = new Set([
-  'password', 'password1', '12345678', '123456789', '1234567890',
-  'qwerty', 'qwerty123', 'qwertyuiop', 'abc123', 'abc1234', '11111111', '12341234',
-  'iloveyou', 'admin', 'admin123', 'administrator', 'root', 'toor', 'pass',
-  'pass123', 'pass1234', 'welcome', 'welcome1', 'welcome123', 'monkey', 'dragon',
-  'letmein', 'trustno1', 'baseball', 'iloveu', 'master', 'sunshine', 'ashley',
-  'michael', 'shadow', 'jordan', 'superman', 'harley', 'fuckme', 'fuckyou', 'pussy',
-  '696969', 'hottie', 'loveme', 'football', 'charlie', 'jennifer', 'hunter',
-  'buster', 'soccer', 'harry', 'andrew', 'tigger', 'sunshine1', 'iloveyou1',
-])
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req)
@@ -55,18 +38,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: parsed.error }, { status: 400 })
     }
     const { email, password, name, phone, cityId, role, acceptedTerms, acceptedPrivacy } = parsed.body
-    // Narrow for downstream — the typed-as-unknown `password` would fail at
-    // .length / .toLowerCase() otherwise.
     if (typeof password !== 'string') {
       return NextResponse.json({ error: 'La contraseña es requerida' }, { status: 400 })
     }
 
-// ── Required: name + role + password + at least one of (email, phone)
-    // Name: trim, collapse internal whitespace, min 2 chars, max 100.
-    // ponytail: min length kept at 2 (real 2-char names exist).
-    const trimmedName = typeof name === 'string'
-      ? name.trim().replace(/\s+/g, ' ')
-      : ''
+    // ── Required: name + role + password + at least one of (email, phone)
+    // sanitizeDisplayName strips zero-width + bidi controls, normalizes
+    // Unicode to NFC, then trims + collapses internal whitespace (M5).
+    const trimmedName = sanitizeDisplayName(name)
     if (!trimmedName) {
       return NextResponse.json({ error: 'El nombre es requerido' }, { status: 400 })
     }
@@ -92,6 +71,9 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Password strength: minimum 8 chars, no top-50 common passwords.
+    // Bcrypt cost 13 (raised from 12 in 2026-07-27 audit) — ~500ms on
+    // modern hardware, keeps 8-char passwords costly enough to resist
+    // bulk brute-force at typical botnet scale.
     if (password.length < 8) {
       return NextResponse.json(
         { error: 'La contraseña debe tener al menos 8 caracteres' },
@@ -104,7 +86,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
-    if (COMMON_PASSWORDS.has(password.toLowerCase())) {
+    if (isCommonPassword(password)) {
       return NextResponse.json(
         { error: 'Esta contraseña es muy común. Elige otra más segura.' },
         { status: 400 }
@@ -112,8 +94,6 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Email/phone validation: at least one must be present and valid.
-    // Both can be present (we store both). Frontend decides which to require.
-    // DB CHECK constraint enforces the at-least-one invariant at the schema level.
     const rawEmail = typeof email === 'string' ? email.trim() : ''
     const rawPhone = typeof phone === 'string' ? phone.trim() : ''
 
@@ -164,21 +144,10 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Atomic insert — handles both duplicate-email AND duplicate-phone races.
-    // ON CONFLICT DO NOTHING makes it atomic; if no rows return, a row matched
-    // the unique key (email or phone) and we report which one collided.
-    //
-    // Trade-off: we now hash the password BEFORE knowing if the email/phone is
-    // free. Bcrypt cost 12 = ~250ms wasted on rare duplicates. Acceptable.
-    const passwordHash = await bcrypt.hash(password, 12)
+    const passwordHash = await bcrypt.hash(password, 13)
     const roleValue = role
 
     // ── Seller requires a city for vendor auto-bootstrap ─────────────────
-    // The vendors table has a CHECK constraint requiring city_id NOT NULL
-    // AND in the set of valid Colombian cities (bogota, medellin, ...).
-    // Since 2026-07-22 we auto-create a vendors row inside the same
-    // register transaction, so a missing city would throw on commit and
-    // leave the user with role='seller' but no vendor — exactly the bug
-    // we are trying to fix. Force the seller to pick a city at signup.
     if (roleValue === 'seller' && !cityId) {
       return NextResponse.json(
         { error: 'Selecciona una ciudad para tu perfil de vendedor' },
@@ -187,22 +156,18 @@ export async function POST(req: NextRequest) {
     }
 
     // Wrap users + profiles insert in a transaction so a profile failure
-    // rolls back the user row. Before this fix a profile INSERT failure left
-    // a user with no profile, making logout a no-op (isTokenRevoked returns
-    // false when no profile exists). DO UPDATE on conflict guarantees the
-    // token_version matches the JWT we issue right after.
+    // rolls back the user row.
     const client = await pool.connect()
     let user: { id: string; email: string; name: string; role: string; phone: string; city_id: string | null }
     try {
       await client.query('BEGIN')
 
-      // Email verification feature-paused (2026-07-22) — new users are created
-      // with email_verified=true so they can use the app immediately.
-      // To re-enable: drop the literal `true` here and uncomment the
-      // `Email verification` block + the `sendVerificationEmail` import.
+      // New users start with email_verified=false (C1 — re-enabled 2026-07-27).
+      // The verification email is sent AFTER the COMMIT (below) so a rollback
+      // never leaves an orphaned token pointing at a non-existent user.
       const userResult = await client.query(
         `INSERT INTO users (email, password_hash, name, phone, city_id, role, email_verified)
-         VALUES ($1, $2, $3, $4, $5, $6, true)
+         VALUES ($1, $2, $3, $4, $5, $6, false)
          ON CONFLICT DO NOTHING
          RETURNING id, email, name, role, phone, city_id, email_verified`,
         [cleanEmail as string | null, passwordHash, trimmedName, cleanPhone as string | null, cityId || null, roleValue]
@@ -210,8 +175,6 @@ export async function POST(req: NextRequest) {
 
       if (userResult.rows.length === 0) {
         await client.query('ROLLBACK')
-        // Could be email OR phone conflict — narrow it down so the user knows
-        // which field to change.
         if (cleanEmail) {
           const dup = await client.query('SELECT 1 FROM users WHERE email = $1 LIMIT 1', [cleanEmail])
           if (dup.rows.length > 0) {
@@ -224,17 +187,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'El teléfono ya está registrado' }, { status: 400 })
           }
         }
-        // Both NULL — race condition we couldn't narrow down.
         return NextResponse.json({ error: 'No se pudo crear la cuenta. Verifica email y teléfono.' }, { status: 400 })
       }
 
       user = userResult.rows[0]
 
-      // Profile upsert: token_version is forced to 1 so the JWT we issue
-      // matches profiles.token_version (otherwise isTokenRevoked would treat
-      // the brand-new token as revoked on the very first request).
-      // RETURNING id so we can auto-create a vendors row when role='seller'
-      // (see seller auto-bootstrap block below).
       const profileResult = await client.query(
         `INSERT INTO profiles (id, user_id, email, name, role, token_version)
          VALUES (gen_random_uuid(), $1, $2, $3, $4, 1)
@@ -248,20 +205,8 @@ export async function POST(req: NextRequest) {
       )
       const profileId: string = profileResult.rows[0].id
 
-      // ── Seller auto-bootstrap (2026-07-22) — when a user registers with
-      // role='seller', we automatically create a vendors row inside the
-      // same transaction. Before this fix, the seller had to complete the
-      // /onboarding VendorFormSlide to create their vendor row. If they
-      // skipped onboarding (closed tab, navigated away, etc.) they ended
-      // up with user.role='seller' but an empty vendors table, which made
-      // /profile/edit show "No tienes perfil" and /vendor/${null} 404.
-      //
-      // We create the vendor with placeholder values that are easy to spot
-      // in the UI ("Mi negocio de {firstName}") so the seller knows they
-      // have to finish editing it from /profile/edit before going live.
-      //
-      // The slug uses the placeholder name + city, same algorithm as POST
-      // /api/vendors (generateUniqueSlug, now in @/lib/vendor-slug).
+      // ── Seller auto-bootstrap — creates a placeholder vendor row in
+      // the same transaction so the seller can complete their profile.
       if (roleValue === 'seller') {
         const firstName = trimmedName.split(' ')[0] || trimmedName || 'vendedor'
         const placeholderName = `Mi negocio de ${firstName}`
@@ -278,11 +223,7 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      // ── Ley 1581/2012 — record the consent inside the same tx so the
-      // audit log never refers to a user that doesn't exist.
-      // The ip_address column is `inet`; use NULL when we couldn't
-      // resolve a real client IP rather than the placeholder string
-      // 'unknown' (which Postgres rejects as invalid inet syntax).
+      // ── Ley 1581/2012 — record the consent inside the same tx
       const policyVersion = process.env.POLICY_VERSION || 'v1.0'
       const safeIp = (ip && ip !== 'unknown') ? ip : null
       await client.query(
@@ -301,32 +242,27 @@ export async function POST(req: NextRequest) {
       client.release()
     }
 
-    // ── Email verification — DISABLED 2026-07-22 (feature-paused, NOT deleted).
-    // The token issuance + email send are kept commented below so we can
-    // re-enable the feature in one place. The DB column `email_verified` is
-    // forced true in the INSERT above, so new users skip verification.
-    // To re-enable:
-    //   1. Uncomment `import { issueEmailVerificationToken, sendVerificationEmail }`
-    //      at the top of this file.
-    //   2. Drop the literal `true` from the INSERT and uncomment this block:
-    //   ──────────────────────────────────────────────────────────────────
-    //   if (user.email) {
-    //     try {
-    //       const v = issueEmailVerificationToken(user.id)
-    //       await pool.query(
-    //         `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
-    //          VALUES ($1, $2, $3)`,
-    //         [user.id, v.tokenHash, v.expiresAt]
-    //       )
-    //       const result = await sendVerificationEmail({
-    //         to: user.email, name: user.name, token: v.token,
-    //       })
-    //       if (!result.ok) logger.error({ userId: user.id, error: result.error }, '[register] Verification email send failed:')
-    //     } catch (emailErr) {
-    //       logger.error(serializeErr(emailErr), '[register] Verification email error (non-fatal):')
-    //     }
-    //   }
-    //   3. Flip `emailVerified: false, requiresEmailVerification: true` below.
+    // ── Email verification (re-enabled 2026-07-27 audit C1).
+    // Best-effort: a failed send must not block the registration. The user
+    // can re-trigger via the EmailVerifyBanner's "Reenviar email" link,
+    // which calls /api/auth/resend-verification. The token is a 32-byte
+    // random base64url stored as SHA-256 in email_verification_tokens.
+    if (user.email) {
+      try {
+        const v = issueEmailVerificationToken(user.id)
+        await pool.query(
+          `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
+           VALUES ($1, $2, $3)`,
+          [user.id, v.tokenHash, v.expiresAt]
+        )
+        const result = await sendVerificationEmail({
+          to: user.email, name: user.name, token: v.token,
+        })
+        if (!result.ok) logger.error({ userId: user.id, error: result.error }, '[register] Verification email send failed:')
+      } catch (emailErr) {
+        logger.error(serializeErr(emailErr), '[register] Verification email error (non-fatal):')
+      }
+    }
 
     const tokenPayload = { userId: user.id, email: user.email, role: roleValue as 'buyer' | 'seller', tokenVersion: 1 }
     const token = signTokenSync(tokenPayload, '15m')
@@ -334,11 +270,10 @@ export async function POST(req: NextRequest) {
 
     // Token is set via httpOnly cookies only — never echo it in the body
     const response = NextResponse.json({
-      // Email verification feature-paused 2026-07-22 — new users are
-      // immediately verified. Keep the field name so the frontend keeps
-      // working; flip both back to `false` / `true` to re-enable.
-      emailVerified: true,
-      requiresEmailVerification: false,
+      // Re-enabled 2026-07-27 — new users must verify their email before
+      // they can create vendors, leave reviews, or contact sellers.
+      emailVerified: false,
+      requiresEmailVerification: true,
       user: {
         id: user.id,
         email: user.email || '',
@@ -347,14 +282,12 @@ export async function POST(req: NextRequest) {
         cityId: user.city_id,
         role: user.role,
         avatarUrl: '',
-        // Sprint 7 B-AUTH-1 (2026-07-23): include the verification flag on
-        // the user object itself, not only at the top level. Frontend
-        // Zustand store calls `setUser(data.user)` and the EmailVerifyBanner
-        // hides only when `user.emailVerified === true`. Without this,
-        // the banner showed the "Verifica tu email" prompt right after
-        // registration even though the user was already verified.
-        emailVerified: true,
+        emailVerified: false,
       },
+    }, {
+      // Auth responses must not be cached by browsers, CDNs, or proxies —
+      // any cached response with a Set-Cookie header can be replayed.
+      headers: { 'Cache-Control': 'no-store' },
     })
 
     const isProd = process.env.NODE_ENV === 'production'
@@ -362,10 +295,6 @@ export async function POST(req: NextRequest) {
       httpOnly: true,
       path: '/',
       maxAge: 60 * 15,
-      // S3-SEC-3 (audit 2026-07-23): changed SameSite from 'lax' to 'strict'.
-      // See apps/web/app/api/auth/login/route.ts for rationale. Defense in
-      // depth on top of the Origin/Referer CSRF check in lib/csrf.ts
-      // (S3-SEC-4 below).
       sameSite: 'strict',
       secure: isProd,
     })
@@ -373,10 +302,6 @@ export async function POST(req: NextRequest) {
       httpOnly: true,
       path: '/',
       maxAge: 60 * 60 * 24 * 7,
-      // S3-SEC-3 (audit 2026-07-23): changed SameSite from 'lax' to 'strict'.
-      // See apps/web/app/api/auth/login/route.ts for rationale. Defense in
-      // depth on top of the Origin/Referer CSRF check in lib/csrf.ts
-      // (S3-SEC-4 below).
       sameSite: 'strict',
       secure: isProd,
     })

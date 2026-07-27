@@ -21,6 +21,24 @@
  * In development (no proxy, direct localhost hits), the socket is
  * 127.0.0.1 anyway, so the header is honored and the rate limiter
  * still works. That keeps dev and prod symmetric.
+ *
+ * --------------------------------------------------------------------------
+ * DEPLOYMENT ASSUMPTION (read before changing):
+ *   `getSocketIp` below is hardcoded to '127.0.0.1'. This is NOT a bug
+ *   for the current deployment (Caddy listens on 127.0.0.1:443 and
+ *   forwards to 127.0.0.1:3005), but it means the rate limiter and
+ *   consent-log IP attribution TRUST that header is set by a process
+ *   on the same host. If Caddy is ever moved off-host, or a second
+ *   proxy is added in front, you MUST:
+ *     1. Replace `getSocketIp` with a real socket-IP reader (Next 16
+ *        doesn't expose `request.ip` on the App Router at time of
+ *        writing — wrapping the route handler in a custom server is
+ *        the standard workaround).
+ *     2. Update `TRUSTED_PROXIES` to include the new proxy IPs.
+ *     3. Add a boot-time assert that fails fast if `TRUSTED_PROXIES`
+ *        doesn't include `127.0.0.1` (the current default).
+ *   Until then, the system trusts `X-Forwarded-For` from 127.0.0.1.
+ * --------------------------------------------------------------------------
  */
 
 import type { NextRequest } from 'next/server'

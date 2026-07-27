@@ -7,20 +7,7 @@ import { getClientIp } from '@/lib/trusted-ip'
 import { hashToken } from '@/lib/email'
 import { parseJsonBody } from '@/lib/parse-json'
 import { requireSameOrigin } from '@/lib/csrf'
-
-// Top-50 most common passwords — must match the list in register/route.ts.
-// ponytail: duplicate list is intentional to keep reset flow standalone
-// without dragging in the register module's private constants.
-const COMMON_PASSWORDS = new Set([
-  'password', 'password1', '12345678', '123456789', '1234567890',
-  'qwerty', 'qwerty123', 'qwertyuiop', 'abc123', 'abc1234', '11111111', '12341234',
-  'iloveyou', 'admin', 'admin123', 'administrator', 'root', 'toor', 'pass',
-  'pass123', 'pass1234', 'welcome', 'welcome1', 'welcome123', 'monkey', 'dragon',
-  'letmein', 'trustno1', 'baseball', 'iloveu', 'master', 'sunshine', 'ashley',
-  'michael', 'shadow', 'jordan', 'superman', 'harley', 'fuckme', 'fuckyou', 'pussy',
-  '696969', 'hottie', 'loveme', 'football', 'charlie', 'jennifer', 'hunter',
-  'buster', 'soccer', 'harry', 'andrew', 'tigger', 'sunshine1', 'iloveyou1',
-])
+import { isCommonPassword } from '@/lib/common-passwords'
 
 /**
  * POST /api/auth/reset-password
@@ -69,7 +56,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
-    if (COMMON_PASSWORDS.has(password.toLowerCase())) {
+    if (isCommonPassword(password)) {
       return NextResponse.json(
         { error: 'Esta contraseña es muy común. Elige otra más segura.' },
         { status: 400 }
@@ -114,7 +101,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const passwordHash = await bcrypt.hash(password, 12)
+    const passwordHash = await bcrypt.hash(password, 13)
 
     // 1) Mark token as used
     await client.query(

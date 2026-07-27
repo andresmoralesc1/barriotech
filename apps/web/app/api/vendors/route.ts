@@ -234,19 +234,23 @@ export async function POST(req: NextRequest) {
     // To re-enable: uncomment the `if (verified.rows[0]?.email_verified === false)`
     // branch below.
     // ──────────────────────────────────────────────────────────────────
+    // Re-enabled 2026-07-27 (audit C1): email verification is now
+    // required to create a vendor profile. Frontend renders the
+    // verify-email banner when this returns requiresEmailVerification,
+    // so the UX path is already wired.
     const verified = await pool.query(
       'SELECT email_verified FROM users WHERE id = $1',
       [auth.userId]
     )
-    // if (verified.rows[0]?.email_verified === false) {
-    //   return NextResponse.json(
-    //     {
-    //       error: 'Verifica tu email antes de crear un puesto.',
-    //       requiresEmailVerification: true,
-    //     },
-    //     { status: 403 }
-    //   )
-    // }
+    if (verified.rows[0]?.email_verified === false) {
+      return NextResponse.json(
+        {
+          error: 'Verifica tu email antes de crear un puesto.',
+          requiresEmailVerification: true,
+        },
+        { status: 403 }
+      )
+    }
 
     const parsed = await parseJsonBody<Record<string, unknown>>(req)
     if (!parsed.ok) {

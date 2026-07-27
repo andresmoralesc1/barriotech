@@ -4,6 +4,8 @@ import { requireAuth } from '@/lib/auth'
 import pool from '@/lib/db'
 import { COLOMBIA_CITIES } from '@/lib/core/constants/cities'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimit } from '@/lib/rate-limit'
+import { getClientIp } from '@/lib/trusted-ip'
 
 const VALID_CITY_IDS = new Set(COLOMBIA_CITIES.map((c) => c.id))
 
@@ -135,6 +137,19 @@ export async function GET(req: NextRequest) {
  */
 export async function PATCH(req: NextRequest) {
     const csrf = requireSameOrigin(req); if (csrf) return csrf
+  // M7 (audit 2026-07-27): cap vendor updates at 30/min per IP. The seller
+  // dashboard's autosave-on-blur can spin several updates per session, but
+  // any genuine edit loop is well under 30/min. Caps scripted abuse that
+  // could reach for a credential-stuffing or geo-rotation DoS via the
+  // self-update path.
+  const ip = getClientIp(req)
+  const { allowed, retryAfter } = await checkRateLimit(ip, 'vendor-update-self', 30, 60 * 1000)
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Demasiadas actualizaciones. Intenta de nuevo en un momento.', retryAfter },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+    )
+  }
   try {
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth

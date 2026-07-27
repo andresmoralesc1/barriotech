@@ -27,7 +27,11 @@ function getApiKey(): string | null {
 }
 
 function getFromAddress(): { email: string; name: string } {
-  const email = process.env.EMAIL_FROM || 'info@andresmorales.com.co'
+  // Default to no-reply@ so Brevo rejects anything that tries to forge a
+  // reply (the address is a mailbox that doesn't accept inbound). Operators
+  // can override via EMAIL_FROM, but only if they also configure a matching
+  // SPF/DKIM record on the new domain.
+  const email = process.env.EMAIL_FROM || 'no-reply@andresmorales.com.co'
   const name = process.env.EMAIL_FROM_NAME || 'BarrioTech'
   return { email, name }
 }

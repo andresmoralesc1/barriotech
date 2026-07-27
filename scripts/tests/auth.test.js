@@ -459,12 +459,18 @@ test('POST /api/auth/login rejects an unparseable identifier (not email, not pho
 
 // --- Sprint 7 B-AUTH: auth fixes regression tests ---------------------
 
-test('Sprint 7 B-AUTH-1: POST /api/auth/register includes user.emailVerified', async () => {
+test('Sprint 7 B-AUTH-1: POST /api/auth/register echoes emailVerified=false (post-audit, C1 re-enabled)', async () => {
   // Regression: before Sprint 7, the register response had
   // `emailVerified: true` only at the TOP level, not inside `user`.
   // Frontend's setUser(data.user) → user.emailVerified was undefined →
   // EmailVerifyBanner showed "Verifica tu email" right after register
   // even though email was already verified.
+  //
+  // 2026-07-27 audit follow-up (C1): email verification is RE-ENABLED.
+  // A fresh registration must now return emailVerified:false at BOTH
+  // layers (top-level and inside `user`) plus requiresEmailVerification:true,
+  // and a record must exist in email_verification_tokens. The frontend
+  // banner shown right after signup is now the EXPECTED flow, not a bug.
   await resetRateLimit()
   const email = 'sprint7-' + Date.now() + '@example.test'
   const reg = await fetchJSON('/api/auth/register', {
@@ -481,10 +487,14 @@ test('Sprint 7 B-AUTH-1: POST /api/auth/register includes user.emailVerified', a
     }),
   })
   assert.equal(reg.status, 200, `register should 200, got ${reg.status}`)
-  // Both layers must agree: top-level emailVerified AND user.emailVerified.
-  assert.equal(reg.body.emailVerified, true, 'top-level emailVerified must be true')
-  assert.equal(reg.body.user.emailVerified, true,
-    'user.emailVerified must be true so frontend Zustand store hides the banner')
+  // Both layers must agree: top-level emailVerified AND user.emailVerified,
+  // now both false. The banner is expected and required UX.
+  assert.equal(reg.body.emailVerified, false,
+    'top-level emailVerified must be false (email verification re-enabled 2026-07-27)')
+  assert.equal(reg.body.user.emailVerified, false,
+    'user.emailVerified must be false so frontend Zustand store shows the verify banner')
+  assert.equal(reg.body.requiresEmailVerification, true,
+    'requiresEmailVerification must be true so the banner CTA appears')
 })
 
 test('Sprint 7 B-AUTH-3: POST /api/auth/refresh does NOT require Origin header', async () => {
@@ -534,6 +544,11 @@ test('Sprint 9 C.2: response includes x-request-id header (generated when client
 })
 
 test('Sprint 9 C.2: client-supplied x-request-id is echoed back', async () => {
+  // The full test suite exhausts the 'login' bucket (10/15min) before
+  // this test runs. Wipe the table so this test, which only asserts the
+  // x-request-id header behavior, isn't subject to rate-limit carryover
+  // from other test files.
+  await resetRateLimit()
   const customId = 'my-custom-trace-id-12345'
   const res = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST',
@@ -557,6 +572,7 @@ test('Sprint 9 C.2: x-request-id with disallowed characters is dropped and a fre
   // fetch because the Headers API rejects invalid header values before
   // sending. That's actually a stronger defense — the OS / Node layer
   // already strips CRLF, so the regex is belt-and-suspenders.
+  await resetRateLimit()
   const invalid = 'has spaces and !@#$ chars'
   const res = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST',
@@ -575,6 +591,7 @@ test('Sprint 9 C.2: x-request-id with disallowed characters is dropped and a fre
 
 test('Sprint 9 C.2: x-request-id too long (>64 chars) is dropped and a fresh UUID is generated', async () => {
   // The regex caps at 64 chars. Anything longer is dropped.
+  await resetRateLimit()
   const tooLong = 'a'.repeat(100)
   const res = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST',

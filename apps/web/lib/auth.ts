@@ -46,6 +46,10 @@ export async function verifyToken(token: string): Promise<TokenPayload | null> {
     const { payload } = await jwtVerify(token, secretKey, {
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
+      // Tolerate up to 5s of clock drift between the issuer (PM2 process)
+      // and the verifier. Caddy/PM2/NTP usually stay within 1s, but a
+      // 5s cushion prevents a stray "Token inválido" at the boundary.
+      clockTolerance: 5,
     })
     return payload as unknown as TokenPayload
   } catch {
@@ -54,6 +58,7 @@ export async function verifyToken(token: string): Promise<TokenPayload | null> {
         const { payload } = await jwtVerify(token, previousKey, {
           issuer: JWT_ISSUER,
           audience: JWT_AUDIENCE,
+          clockTolerance: 5,
         })
         return payload as unknown as TokenPayload
       } catch {

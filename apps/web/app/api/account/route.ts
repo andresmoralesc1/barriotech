@@ -3,6 +3,8 @@ import { logger, serializeErr } from '@/lib/logger'
 import { requireAuth } from '@/lib/auth'
 import pool from '@/lib/db'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimit } from '@/lib/rate-limit'
+import { getClientIp } from '@/lib/trusted-ip'
 
 /**
  * DELETE /api/account — ARCO right of cancellation / suppression.
@@ -28,6 +30,20 @@ export const runtime = 'nodejs'
 
 export async function DELETE(request: NextRequest) {
     const csrf = requireSameOrigin(request); if (csrf) return csrf
+  // M6 (audit 2026-07-27): cap the DELETE burst at 5/h per IP. The CSRF
+  // check above blocks cross-site triggers, but a same-site loop (e.g.
+  // a misbehaving extension, or a user repeatedly re-opening the
+  // confirmation modal) can still hit the cascade-heavy code path often
+  // enough to load the DB. 5/h is well above the legitimate UX ceiling.
+  const ip = getClientIp(request)
+  const { allowed, retryAfter } = await checkRateLimit(ip, 'account-delete', 5, 60 * 60 * 1000)
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Demasiados intentos. Intenta de nuevo más tarde.', retryAfter },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+    )
+  }
+
   // 1. Authenticate
   const auth = await requireAuth(request)
 

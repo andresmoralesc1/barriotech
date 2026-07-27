@@ -53,6 +53,10 @@ export async function verifyTokenEdge(token: string): Promise<TokenPayload | nul
     const { payload } = await jwtVerify(token, secretKey, {
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
+      // Mirror lib/auth.ts so middleware and API routes agree on the
+      // tolerable clock drift. Anything tighter than 5s risks false
+      // rejections at the 15-min token boundary.
+      clockTolerance: 5,
     })
     return payload as unknown as TokenPayload
   } catch {
@@ -61,6 +65,7 @@ export async function verifyTokenEdge(token: string): Promise<TokenPayload | nul
         const { payload } = await jwtVerify(token, previousKey, {
           issuer: JWT_ISSUER,
           audience: JWT_AUDIENCE,
+          clockTolerance: 5,
         })
         return payload as unknown as TokenPayload
       } catch {

@@ -3,7 +3,11 @@ import { logger, serializeErr } from '@/lib/logger'
 import pool from '@/lib/db'
 import { requireAuth } from '@/lib/auth'
 import { getCityById } from '@/lib/core/constants'
+import { isPhone, normalizePhone } from '@/lib/auth-helpers'
 import { parseJsonBody } from '@/lib/parse-json'
+import { sanitizeDisplayName } from '@/lib/sanitize'
+import { requireSameOrigin } from '@/lib/csrf'
+const noStoreHeaders = { 'Cache-Control': 'no-store' } as const
 async function getUserFromDb(userId: string) {
   const result = await pool.query(
     'SELECT id, email, name, role, phone, city_id, is_active, email_verified FROM users WHERE id = $1',
@@ -33,7 +37,7 @@ export async function GET(req: NextRequest) {
     const user = await getUserFromDb(auth.userId)
     if (!user) return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
 
-    return NextResponse.json(user)
+    return NextResponse.json(user, { headers: noStoreHeaders })
   } catch (err) {
     logger.error(serializeErr(err), 'GET /api/auth/me error:')
     return NextResponse.json({ error: 'Error interno' }, { status: 500 })
@@ -42,6 +46,11 @@ export async function GET(req: NextRequest) {
 
 // PATCH /api/auth/me — update user profile (name, phone, cityId)
 export async function PATCH(req: NextRequest) {
+  // C2 (audit 2026-07-27): CSRF check on profile update. SameSite=strict
+  // cookies already block naive cross-site mutations, but defense-in-depth
+  // (matching the rest of the mutating endpoints) keeps us safe if the
+  // cookie policy ever softens (e.g. for an OAuth callback later).
+  const csrf = requireSameOrigin(req); if (csrf) return csrf
   try {
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
@@ -68,7 +77,9 @@ export async function PATCH(req: NextRequest) {
       if (typeof name !== 'string') {
         return NextResponse.json({ error: 'name debe ser texto' }, { status: 400 })
       }
-      const trimmed = name.trim().replace(/\s+/g, ' ')
+      // M5 (audit 2026-07-27): sanitizeDisplayName strips zero-width + bidi
+      // controls and normalizes Unicode to NFC before the length check.
+      const trimmed = sanitizeDisplayName(name)
       if (!trimmed) {
         return NextResponse.json({ error: 'El nombre es requerido' }, { status: 400 })
       }
@@ -91,21 +102,19 @@ export async function PATCH(req: NextRequest) {
       if (phone !== null && typeof phone !== 'string') {
         return NextResponse.json({ error: 'phone debe ser texto' }, { status: 400 })
       }
-      // Empty string clears the phone. Otherwise validate Colombian mobile
-      // shape (10 digits starting with 3, or 12 with 57 prefix).
+      // Empty string clears the phone. Otherwise validate via the shared
+      // normalizePhone helper (M9 audit 2026-07-27) so the same rules
+      // apply on register, login, and profile update.
       let normalizedPhone: string | null = null
       if (typeof phone === 'string' && phone.trim() !== '') {
-        const digits = phone.replace(/\D/g, '')
-        const valid =
-          (digits.length === 10 && digits.startsWith('3')) ||
-          (digits.startsWith('57') && digits.length === 12 && digits.startsWith('573'))
-        if (!valid) {
+        if (!isPhone(phone)) {
           return NextResponse.json(
             { error: 'Ingresa un número de teléfono colombiano válido (10 dígitos)' },
             { status: 400 }
           )
         }
-        normalizedPhone = digits
+        const normalized = normalizePhone(phone)
+        normalizedPhone = normalized // guaranteed non-null when isPhone() is true
       }
       updates.push(`phone = $${paramCount++}`)
       values.push(normalizedPhone)
@@ -183,7 +192,7 @@ export async function PATCH(req: NextRequest) {
       phone: user.phone || '',
       cityId: user.city_id || '',
       avatarUrl: '',
-    })
+    }, { headers: noStoreHeaders })
   } catch (err) {
     logger.error(serializeErr(err), 'PATCH /api/auth/me error:')
     return NextResponse.json({ error: 'Error interno' }, { status: 500 })
