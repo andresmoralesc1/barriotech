@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  let body: { userId?: unknown; email?: unknown }
+  let body: { userId?: unknown; email?: unknown; phone?: unknown }
   try {
     body = await req.json()
   } catch {
@@ -99,9 +99,20 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = typeof body?.userId === 'string' ? body.userId.trim() : ''
+  // FIELD-FIX (2026-07-27): email is optional now. /api/auth/register
+  // allows phone-only signups (RegisterForm lets the seller type
+  // either an email OR a phone in the single contact field — see
+  // components/auth/RegisterForm.tsx). If the seller registered with
+  // phone only, users.email is NULL and the field agent has no email
+  // to verify against. We require EITHER userId+email OR userId+phone
+  // and match whichever the DB row has.
   const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : ''
-  if (!userId || !email) {
-    return NextResponse.json({ error: 'userId y email requeridos' }, { status: 400 })
+  const phone = typeof body?.phone === 'string' ? body.phone.replace(/\D/g, '') : ''
+  if (!userId || (!email && !phone)) {
+    return NextResponse.json(
+      { error: 'userId con email o phone requerido' },
+      { status: 400 }
+    )
   }
   // Cheap format check BEFORE the DB roundtrip. users.id is a UUID;
   // if the caller hands us "MISS" (e.g. a buggy extraction script) we
@@ -112,7 +123,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const u = await pool.query(
-      'SELECT email, email_verified FROM users WHERE id = $1',
+      'SELECT email, phone, email_verified FROM users WHERE id = $1',
       [userId]
     )
     if (u.rows.length === 0) {
@@ -120,14 +131,32 @@ export async function POST(req: NextRequest) {
     }
     const row = u.rows[0]
     const dbEmail = String(row.email ?? '').toLowerCase()
-    if (dbEmail !== email) {
-      // Log the mismatch — could be a typo on the field agent's
-      // part, or someone probing with a guessed userId.
+    const dbPhone = String(row.phone ?? '').replace(/\D/g, '')
+
+    // Match whichever field the caller supplied. If both email and
+    // phone are given, BOTH must match — defense against a guessed
+    // userId being verified via a leaked email alone.
+    let matched = false
+    if (email && phone) {
+      matched = dbEmail === email && dbPhone === phone
+    } else if (email) {
+      matched = dbEmail === email && dbEmail !== ''
+    } else {
+      // phone-only path: the seller must have a phone on file.
+      matched = dbPhone === phone && dbPhone !== ''
+    }
+    if (!matched) {
       logger.warn(
-        { userId, suppliedEmail: email, dbEmail },
-        '[admin/verify-email] email mismatch — refusing'
+        {
+          userId,
+          suppliedEmail: email || null,
+          suppliedPhone: phone || null,
+          hasEmail: dbEmail !== '',
+          hasPhone: dbPhone !== '',
+        },
+        '[admin/verify-email] contact mismatch — refusing'
       )
-      return NextResponse.json({ error: 'Email no coincide' }, { status: 409 })
+      return NextResponse.json({ error: 'Email o teléfono no coincide' }, { status: 409 })
     }
 
     const alreadyVerified = row.email_verified === true

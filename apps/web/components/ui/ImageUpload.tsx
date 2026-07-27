@@ -42,8 +42,12 @@ const HEIC_MSG =
   'comparte la foto por WhatsApp y súbela desde ahí (se convierte a JPEG).'
 
 const uploadFile = async (file: File) => {
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Máximo 5MB')
+    // FIELD-FIX (2026-07-27): mirror the 10MB backend cap. The 5MB
+    // mismatch was making the client-side check stricter than the
+    // server (upload would pass client-side at 6MB and fail at the
+    // server with a generic 413). Now both ends say 10MB.
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Máximo 10MB')
       return
     }
     if (isHeic(file)) {

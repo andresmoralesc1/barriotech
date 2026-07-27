@@ -10,7 +10,13 @@ import { randomUUID } from 'crypto'
 import { requireSameOrigin } from '@/lib/csrf'
 
 const STORAGE_DIR = path.join(process.cwd(), 'storage')
-const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+// FIELD-FIX (2026-07-27): was 5MB, bumped to 10MB. iPhone 14/15 default
+// HEIC is ~5MB but the JPEG equivalent (after Most Compatible mode) is
+// often 6-8MB; Samsung S23 main sensor photos run 7-12MB. The 5MB cap
+// was rejecting the majority of agent photos in dry runs. 10MB still
+// leaves room for the 30s statement timeout (single-image upload on
+// 3G/4G Colombian cell rarely takes > 15s).
+const MAX_SIZE = 10 * 1024 * 1024 // 10MB
 
 // CRIT-24 fix (2026-07-22): the MIME type comes from the client
 // (`Content-Type` part of the multipart upload). Trusting it allowed storing
@@ -90,7 +96,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: 'Máximo 5MB' }, { status: 400 })
+      // Match the cap in the JSDoc above. Keep this string in sync
+      // with components/ui/ImageUpload.tsx — both ends tell the user
+      // the same number.
+      return NextResponse.json({ error: 'Máximo 10MB' }, { status: 400 })
     }
 
     if (!ALLOWED_TYPES.includes(file.type)) {
