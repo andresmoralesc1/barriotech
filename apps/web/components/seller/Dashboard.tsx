@@ -332,27 +332,30 @@ export function DashboardContent() {
         </header>
 
         <div className="p-4 space-y-4">
-          {/* P2-2 (audit 2026-07-27): inline empty state when the seller
-              hasn't created their first vendor yet. Previously this
-              redirected to /onboarding; the redirect hid WHY the page
-              was empty and made navigation flows feel broken. Now we
-              stay on the dashboard (the seller's natural home) and
-              explain + CTA. */}
-          {vendors.length === 0 && (
-            <Card variant="outlined" className="p-6 text-center">
+          {/* FIELD-FIX (2026-07-27): inline empty state when no vendor
+              is currently active on the map. /api/auth/register auto-
+              bootstraps a placeholder vendor (is_active=false) in the
+              same tx, so the OLD trigger `vendors.length === 0` was
+              dead code — every seller had a vendor row from minute 0.
+              The useful signal is "this vendor is not yet visible to
+              buyers", which means `!vendors.some(v => v.isActive)`.
+              We point to /onboarding because that's where the
+              VendorFormSlide sets isActive=true in the same PATCH. */}
+          {vendors.length > 0 && !vendors.some(v => v.isActive) && (
+            <Card variant="outlined" className="p-6 text-center border-orange-300 bg-orange-50/40">
               <div className="inline-flex w-12 h-12 items-center justify-center rounded-full bg-orange-100 mb-3">
                 <Store size={24} className="text-primary" />
               </div>
               <h2 className="text-lg font-semibold text-gray-900 mb-1">
-                Aún no tienes un puesto
+                Tu puesto aún no está visible
               </h2>
               <p className="text-sm text-gray-600 mb-4">
-                Crea tu puesto para empezar a publicar productos y aparecer
-                en el mapa para los compradores de tu zona.
+                Completa tu perfil (nombre, categoría, foto y zona) para aparecer
+                en el mapa y empezar a recibir clientes.
               </p>
               <Link href="/onboarding">
                 <Button className="w-full" size="lg">
-                  Crear mi puesto
+                  Completar mi puesto
                 </Button>
               </Link>
             </Card>

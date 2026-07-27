@@ -125,8 +125,26 @@ export function MultiPhotoUploader({ productId, initialPhotos = [], onChange, on
   // returned /storage/... URL as a photo on this product. The dedicated
   // /api/products/[id]/photos endpoint persists position, owner-check and
   // cap (max 6) consistently with the URL path.
+  // FIELD-FIX (2026-07-27): HEIC/HEIF (iPhone) early-rejection — same
+  // helper as ImageUpload. See components/ui/ImageUpload.tsx for why we
+  // detect+reject instead of converting (bundle cost vs field usage).
+  const isHeic = (f: File): boolean => {
+    if (f.type === 'image/heic' || f.type === 'image/heif') return true
+    const name = f.name.toLowerCase()
+    return name.endsWith('.heic') || name.endsWith('.heif')
+  }
+  const HEIC_MSG =
+    'Tu foto está en formato HEIC (iPhone). En tu iPhone ve a Ajustes → ' +
+    'Cámara → Formatos → "Más compatible" para tomar fotos en JPEG, o ' +
+    'comparte la foto por WhatsApp y súbela desde ahí (se convierte a JPEG).'
+
   const handleFileSelected = async (file: File) => {
     if (uploading) return
+    if (isHeic(file)) {
+      toast({ title: HEIC_MSG, kind: 'error' })
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
     setUploading(true)
     try {
       const fd = new FormData()

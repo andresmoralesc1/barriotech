@@ -23,9 +23,31 @@ export function ImageUpload({
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState('')
 
-  const uploadFile = async (file: File) => {
+  // FIELD-FIX (2026-07-27): iPhone cameras default to HEIC/HEIF which the
+// /api/upload backend rejects (only jpeg/png/gif/webp magic bytes are
+// whitelisted). Detect this BEFORE the upload roundtrip so the seller
+// gets a clear message instead of a generic "Error al subir" toast.
+// Conversion (heic2any / sharp) was considered but skipped — adds 170KB
+// to the bundle for an edge case, and most field-agent Android phones
+// don't hit it. If usage data shows HEIC is common we can revisit.
+const isHeic = (f: File): boolean => {
+  if (f.type === 'image/heic' || f.type === 'image/heif') return true
+  const name = f.name.toLowerCase()
+  return name.endsWith('.heic') || name.endsWith('.heif')
+}
+
+const HEIC_MSG =
+  'Tu foto está en formato HEIC (iPhone). En tu iPhone ve a Ajustes → ' +
+  'Cámara → Formatos → "Más compatible" para tomar fotos en JPEG, o ' +
+  'comparte la foto por WhatsApp y súbela desde ahí (se convierte a JPEG).'
+
+const uploadFile = async (file: File) => {
     if (file.size > 5 * 1024 * 1024) {
       setError('Máximo 5MB')
+      return
+    }
+    if (isHeic(file)) {
+      setError(HEIC_MSG)
       return
     }
 
