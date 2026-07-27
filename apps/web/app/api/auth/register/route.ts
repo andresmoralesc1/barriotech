@@ -220,19 +220,34 @@ export async function POST(req: NextRequest) {
 
       // ── Seller auto-bootstrap — creates a placeholder vendor row in
       // the same transaction so the seller can complete their profile.
+      //
+      // FIELD-FIX (2026-07-27): lat/lng are seeded from the city center
+      // (not NULL anymore). The buyer map's pin filter at
+      // components/map/MapHelpers.tsx:149 drops any vendor whose
+      // lat/lng aren't numbers — a NULL placeholder was therefore
+      // never visible on /map, even after the seller toggled
+      // is_active=true. Seeding the city center means the vendor
+      // appears at a sensible position immediately; the seller can
+      // drag the pin to their actual spot via /dashboard or via the
+      // onboarding GPS step (apps/web/app/(auth)/onboarding).
       if (roleValue === 'seller') {
         const firstName = trimmedName.split(' ')[0] || trimmedName || 'vendedor'
         const placeholderName = `Mi negocio de ${firstName}`
         const slug = await generateUniqueSlug(client, placeholderName, (typeof cityId === 'string' ? cityId : null))
+        const cityCenter = (typeof cityId === 'string')
+          ? COLOMBIA_CITIES.find((c) => c.id === cityId)?.center
+          : undefined
+        const seedLat = cityCenter ? cityCenter[0] : null
+        const seedLng = cityCenter ? cityCenter[1] : null
         await client.query(
           `INSERT INTO vendors (
             profile_id, name, slug, category, description,
             city_id, latitude, longitude, station_type,
             phone, is_active, is_verified, created_at
           )
-          VALUES ($1, $2, $3, 'comida', '', $4, NULL, NULL, 'mobile', $5, false, false, NOW())
+          VALUES ($1, $2, $3, 'comida', '', $4, $5, $6, 'mobile', $7, false, false, NOW())
           ON CONFLICT DO NOTHING`,
-          [profileId, placeholderName, slug, cityId || null, cleanPhone || null]
+          [profileId, placeholderName, slug, cityId || null, seedLat, seedLng, cleanPhone || null]
         )
       }
 

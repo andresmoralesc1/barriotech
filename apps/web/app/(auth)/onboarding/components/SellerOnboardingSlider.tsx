@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Camera, Package, MapPin, MessageCircle, ChevronRight, ChevronLeft } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { VendorFormSlide } from './VendorFormSlide'
+import { LocationCaptureSlide } from './LocationCaptureSlide'
 
 const STORAGE_KEY = 'seller_onboarding_done'
 
@@ -34,16 +35,32 @@ const SLIDES = [
   },
 ]
 
+interface VendorCreated {
+  id: string
+  latitude: number | null
+  longitude: number | null
+  cityId: string | null
+}
+
 interface SellerOnboardingSliderProps {
   onComplete: () => void
   onSkip?: () => void
 }
 
 export function SellerOnboardingSlider({ onComplete, onSkip }: SellerOnboardingSliderProps) {
-  // Index 0 = vendor form (obligatorio). 1..N = slides educativos.
-  const TOTAL_STEPS = SLIDES.length + 1
+  // FIELD-FIX (2026-07-27): added LocationCaptureSlide as step 1,
+  // pushing the educational slides to 2..N. The form (step 0) is
+  // still mandatory and pre-creates the vendor with city-center
+  // coords; the GPS step lets the seller refine before the buyer
+  // map query picks them up.
+  //
+  // Step index map:
+  //   0: VendorFormSlide       (mandatory — creates the vendor)
+  //   1: LocationCaptureSlide  (optional — refines the pin)
+  //   2..N: educational SLIDES  (skippable)
+  const TOTAL_STEPS = SLIDES.length + 2
   const [current, setCurrent] = useState(0)
-  const [vendorId, setVendorId] = useState<string | null>(null)
+  const [vendor, setVendor] = useState<VendorCreated | null>(null)
 
   // Check if already completed on mount
   useEffect(() => {
@@ -66,8 +83,20 @@ export function SellerOnboardingSlider({ onComplete, onSkip }: SellerOnboardingS
     if (current > 0) setCurrent(current - 1)
   }
 
-  const handleFormComplete = (newVendorId: string) => {
-    setVendorId(newVendorId)
+  const handleFormComplete = (newVendor: VendorCreated) => {
+    setVendor(newVendor)
+    goNext()
+  }
+
+  const handleLocationSaved = (_lat: number, _lng: number) => {
+    // ManualLocationPicker already PATCHed /api/vendors/me/location.
+    // We just advance the slider.
+    goNext()
+  }
+
+  const handleLocationSkip = () => {
+    // Seller chose "Lo dejo para después" — advance with the
+    // city-center coords the bootstrap already wrote.
     goNext()
   }
 
@@ -76,7 +105,7 @@ export function SellerOnboardingSlider({ onComplete, onSkip }: SellerOnboardingS
     onSkip?.()
   }
 
-  // Render: form primero, luego slides educativos
+  // Render: form (step 0) → location (step 1) → educational (step 2..N)
   if (current === 0) {
     return (
       <div className="min-h-screen flex flex-col bg-white px-6">
@@ -85,7 +114,22 @@ export function SellerOnboardingSlider({ onComplete, onSkip }: SellerOnboardingS
     )
   }
 
-  const slide = SLIDES[current - 1]
+  if (current === 1 && vendor) {
+    return (
+      <div className="min-h-screen flex flex-col bg-white px-6">
+        <LocationCaptureSlide
+          vendorId={vendor.id}
+          initialLat={vendor.latitude}
+          initialLng={vendor.longitude}
+          cityId={vendor.cityId}
+          onSaved={handleLocationSaved}
+          onSkip={handleLocationSkip}
+        />
+      </div>
+    )
+  }
+
+  const slide = SLIDES[current - 2]
   const IconComponent = slide.Icon
 
   return (

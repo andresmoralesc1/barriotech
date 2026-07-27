@@ -8,7 +8,18 @@ import { CATEGORIES } from '@/lib/core/constants'
 import type { VendorCategory } from '@/lib/core/types'
 
 interface VendorFormSlideProps {
-  onCreated: (vendorId: string) => void
+  // FIELD-FIX (2026-07-27): we now pass the full vendor object back,
+  // not just the id. The next onboarding slide (LocationCaptureSlide)
+  // needs the cityId and the bootstrap lat/lng to seed the map.
+  // Passing them through here avoids a redundant /api/vendors/me call
+  // and lets the picker open centered on the seller's actual city
+  // from the very first render.
+  onCreated: (vendor: {
+    id: string
+    latitude: number | null
+    longitude: number | null
+    cityId: string | null
+  }) => void
   initialName?: string
 }
 
@@ -86,10 +97,21 @@ export function VendorFormSlide({ onCreated, initialName = '' }: VendorFormSlide
         return
       }
 
-      // PATCH returns { vendor }; POST returns { vendor } too — both shapes
-      // agree on the inner vendor key, so we can read either.
-      const vendor = data.vendor
-      onCreated(vendor.id)
+      // Forward lat/lng/cityId so the next slide (LocationCaptureSlide)
+      // can seed its map without a /api/vendors/me round-trip.
+      //
+      // Source the values from `existingVendor` (camelCase from
+      // /api/vendors/me) NOT from `data.vendor` — the PATCH endpoint
+      // returns the raw DB row (snake_case) so `data.vendor.cityId`
+      // would be undefined. The placeholder already has city-center
+      // lat/lng from the register auto-bootstrap, so even if PATCH
+      // didn't touch them they're populated.
+      onCreated({
+        id: data.vendor.id,
+        latitude: typeof existingVendor?.latitude === 'number' ? existingVendor.latitude : null,
+        longitude: typeof existingVendor?.longitude === 'number' ? existingVendor.longitude : null,
+        cityId: typeof existingVendor?.cityId === 'string' ? existingVendor.cityId : (cityId || null),
+      })
     } catch {
       setError('Error de conexión')
       setSubmitting(false)

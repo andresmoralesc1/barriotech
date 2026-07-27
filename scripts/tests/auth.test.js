@@ -410,8 +410,11 @@ test('POST /api/auth/register rejects duplicate phone', async () => {
       acceptedPrivacy: true,
     }),
   })
-  assert.equal(res.status, 400)
-  assert.match(res.body.error, /teléfono ya está registrado/i)
+  // L8 (audit 2026-07-27): the duplicate response was collapsed to a single
+  // generic 409 + message to prevent enumeration of which identifier (email
+  // vs phone) is already registered. We assert the new contract here.
+  assert.equal(res.status, 409)
+  assert.match(res.body.error, /ya existe una cuenta|estos datos/i)
 })
 
 test('POST /api/auth/login accepts a phone as identifier', async () => {
@@ -526,7 +529,17 @@ test('Sprint 7 B-AUTH-3: POST /api/auth/refresh does NOT require Origin header',
 
 // --- Sprint 9 C.2: request id correlation tests ---------------------
 
+// The login bucket is 5/min/IP. The x-request-id tests below each
+// trigger a /api/auth/login (the endpoint that exercises request-id
+// plumbing on the 401 path). Earlier tests in this file may have
+// already burned the bucket, and previous test runs in the same
+// 15-minute window stack on top. Each test resets the bucket before
+// probing so the assertion targets the 401, not a 429.
+async function clearLoginBucket() { await resetRateLimit() }
+
 test('Sprint 9 C.2: response includes x-request-id header (generated when client omits it)', async () => {
+  await clearLoginBucket()
+
   const res = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
