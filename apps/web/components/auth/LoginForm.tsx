@@ -102,7 +102,7 @@ export function LoginForm({ isLoading, error, setError, setIsLoading }: Props) {
           spellCheck={false}
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
-          placeholder="tu@email.com o 300 123 4567"
+          placeholder="tu@email.com o 300 123 4567 (+57 opcional)"
           disabled={isLoading}
           className="w-full px-4 py-3 min-h-[44px] border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50"
         />
@@ -146,12 +146,21 @@ export function LoginForm({ isLoading, error, setError, setIsLoading }: Props) {
         <p className="text-xs text-gray-500">Ingresa tu email o teléfono y tu contraseña.</p>
       )}
 
+      {/* P1-4 (audit 2026-07-27): the submit button is no longer
+          disabled when fields are empty. Empty submissions fall into
+          the `if (!identifier || !password)` branch above and surface
+          "Completa todos los campos" inline. The disabled state was
+          redundant with that inline validation AND caused users on
+          touch / mobile keyboards to tap a non-responsive button with
+          no visual cue that nothing would happen. The button now shows
+          the same submit affordance and the error message explains
+          why nothing changed. */}
       <Button
         type="submit"
         className="w-full"
         size="lg"
         isLoading={isLoading}
-        disabled={isLoading || !identifier || !password}
+        disabled={isLoading}
       >
         {isLoading ? 'Ingresando...' : 'Iniciar Sesión'}
       </Button>

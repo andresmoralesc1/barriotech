@@ -44,8 +44,18 @@ export default function OnboardingPage() {
   }
 
   const handleSellerComplete = () => {
+    // P2-3 (audit 2026-07-27): honor ?redirectTo= so callers can route
+    // a seller back to where they were (e.g. /profile/edit when the
+    // "you have no vendor" screen on /profile/edit links here with
+    // ?redirectTo=/profile/edit). Falls back to /dashboard as before.
+    // Only same-origin paths are accepted to prevent open-redirect.
+    const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
+    const redirectTo = params.get('redirectTo')
+    const safe = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')
+      ? redirectTo
+      : '/dashboard'
     if (user?.role === 'seller') {
-      router.push('/dashboard')
+      router.push(safe)
     } else {
       router.push('/login')
     }

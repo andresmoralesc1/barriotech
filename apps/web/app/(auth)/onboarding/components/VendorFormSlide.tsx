@@ -118,7 +118,7 @@ export function VendorFormSlide({ onCreated, initialName = '' }: VendorFormSlide
           type="tel"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          placeholder="300 123 4567"
+          placeholder="300 123 4567 (+57 opcional)"
         />
 
         <div className="space-y-1">

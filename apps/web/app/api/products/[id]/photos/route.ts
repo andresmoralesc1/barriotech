@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger, serializeErr } from '@/lib/logger'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, requireVerifiedEmail } from '@/lib/auth'
 import pool from '@/lib/db'
 import { requireSameOrigin } from '@/lib/csrf'
 
@@ -47,7 +47,10 @@ export async function POST(
       return NextResponse.json({ error: 'ID inválido' }, { status: 400 })
     }
 
-    const auth = await requireAuth(req)
+    // P1-1 (audit 2026-07-27): require verified email before adding a
+    // product photo (creating new content). The dashboard banner promises
+    // this gate.
+    const auth = await requireVerifiedEmail(req)
     if (auth instanceof NextResponse) return auth
 
     // Verify ownership: product must belong to a vendor owned by this user.

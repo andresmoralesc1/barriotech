@@ -190,7 +190,7 @@ export default function SettingsPage() {
                 <Input
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="300 123 4567"
+                  placeholder="300 123 4567 (+57 opcional)"
                   type="tel"
                 />
               </div>

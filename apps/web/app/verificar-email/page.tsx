@@ -6,56 +6,44 @@ import Link from 'next/link'
 import { Mail, Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useStore } from '@/store/useStore'
+import { useAutoVerifyToken } from '@/hooks/useAutoVerifyToken'
 
 /**
  * /verificar-email
  *
  * Two states:
- *  - URL has ?token=… → call /api/auth/verify-email, show result.
+ *  - URL has ?token=… → useAutoVerifyToken() drives the network call.
+ *    On success, we redirect by role (P1-2 audit 2026-07-27):
+ *      - sellers → /dashboard (where they can complete onboarding)
+ *      - buyers  → /map     (where they can find vendors)
  *  - No token → show a "resend" form (you can re-trigger from here).
- *
- * The page is in Spanish; the verify-email flow happens in the same
- * tab, no email template changes needed.
  */
 function VerifyEmailContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const user = useStore((s) => s.user)
+  const { verifying, result } = useAutoVerifyToken()
 
   const token = searchParams.get('token')
 
-  const [verifying, setVerifying] = useState(false)
-  const [result, setResult] = useState<null | { ok: boolean; message: string }>(null)
   const [resendEmail, setResendEmail] = useState('')
   const [resendStatus, setResendStatus] = useState<null | { ok: boolean; message: string }>(null)
   const [sending, setSending] = useState(false)
 
-  // Auto-verify if the URL has a token
+  // P1-2 (audit 2026-07-27): after a successful verification, redirect
+  // based on role. Previously the page hardcoded `/map` for everyone,
+  // which dropped sellers into a buyer flow after they just confirmed
+  // the email that the dashboard banner told them to confirm — they
+  // had no clear path to their seller dashboard.
+  //
+  // We wait 2s so the user can see the success message before we
+  // navigate; that's the same grace period the previous code used.
   useEffect(() => {
-    if (!token) return
-    setVerifying(true)
-    fetch('/api/auth/verify-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ token }),
-    })
-      .then(async (r) => {
-        const data = await r.json().catch(() => ({}))
-        if (r.ok && data.verified) {
-          setResult({ ok: true, message: 'Tu email ha sido verificado. ¡Ya puedes usar BarrioTech!' })
-          if (user) {
-            useStore.setState({ user: { ...user, emailVerified: true } })
-          }
-          setTimeout(() => router.push('/map'), 2500)
-        } else {
-          setResult({ ok: false, message: data.error || 'No pudimos verificar tu email.' })
-        }
-      })
-      .catch(() => setResult({ ok: false, message: 'Error de conexión. Intenta de nuevo.' }))
-      .finally(() => setVerifying(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token])
+    if (!result?.ok) return
+    const target = user?.role === 'seller' ? '/dashboard' : '/map'
+    const t = setTimeout(() => router.push(target), 2000)
+    return () => clearTimeout(t)
+  }, [result?.ok, user?.role, router])
 
   const handleResend = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -112,6 +100,13 @@ function VerifyEmailContent() {
             {result.ok ? <Check size={18} /> : <X size={18} />}
             <p className="text-sm font-medium">{result.message}</p>
           </div>
+          {result.ok && (
+            <p className="text-xs mt-2 text-green-700">
+              {user?.role === 'seller'
+                ? 'Te llevamos a tu panel de vendedor…'
+                : 'Te llevamos al mapa…'}
+            </p>
+          )}
         </div>
       )}
 

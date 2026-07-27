@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger, serializeErr } from '@/lib/logger'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, requireVerifiedEmail } from '@/lib/auth'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { getClientIp } from '@/lib/trusted-ip'
 import { writeFile, mkdir } from 'fs/promises'
@@ -64,7 +64,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const auth = await requireAuth(req)
+    // P1-1 (audit 2026-07-27): require verified email before uploading
+    // images (creating blob storage records). Photos are surfaced under
+    // a vendor/product immediately.
+    const auth = await requireVerifiedEmail(req)
     if (auth instanceof NextResponse) return auth
     const userId = auth.userId
 

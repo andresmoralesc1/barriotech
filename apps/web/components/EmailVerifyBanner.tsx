@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useState } from 'react'
+import { Mail, X } from 'lucide-react'
 import { useStore } from '@/store/useStore'
 import { Button } from '@/components/ui/Button'
-import { Mail, X } from 'lucide-react'
+import { useAutoVerifyToken } from '@/hooks/useAutoVerifyToken'
 
 /**
  * Email verification banner.
@@ -16,59 +16,20 @@ import { Mail, X } from 'lucide-react'
  *  - Sending: spinner + "Enviando…"
  *  - Sent: "Email reenviado. [Cerrar]"
  *
- * On mount, if the URL has `?token=…`, we POST to /api/auth/verify-email
- * and surface the result (verified, expired, etc.). This makes the link
- * the user clicks in their email a one-click experience.
+ * On mount, if the URL has `?token=…`, the auto-verify network call
+ * is driven by `useAutoVerifyToken()` (P1-3 audit 2026-07-27). This
+ * makes the link the user clicks in their email a one-click experience
+ * even when the banner is the first thing rendered.
  *
  * Used in <SiteHeader> so it appears on every page.
  */
 export function EmailVerifyBanner() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
   const user = useStore((s) => s.user)
-  const [dismissed, setDismissed] = useState(false)
+  const dismissed = useStore((s) => s.verifyBannerDismissed)
+  const setDismissed = useStore((s) => s.setVerifyBannerDismissed)
+  const { verifying, result } = useAutoVerifyToken()
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
-  const [verifying, setVerifying] = useState(false)
-  const [verifyMessage, setVerifyMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
-
-  // Auto-verify if URL has ?token=... (user clicked link in email)
-  useEffect(() => {
-    const token = searchParams.get('token')
-    if (!token) return
-    setVerifying(true)
-    fetch('/api/auth/verify-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ token }),
-    })
-      .then(async (r) => {
-        const data = await r.json().catch(() => ({}))
-        if (r.ok && data.verified) {
-          setVerifyMessage({ type: 'ok', text: 'Email verificado. ¡Bienvenido a BarrioTech!' })
-          // Update the store so the banner disappears
-          if (user) {
-            useStore.setState({ user: { ...user, emailVerified: true } })
-          }
-          // Clean the URL so a refresh doesn't re-trigger
-          const url = new URL(window.location.href)
-          url.searchParams.delete('token')
-          url.searchParams.set('verified', '1')
-          router.replace(url.pathname + url.search)
-        } else {
-          setVerifyMessage({
-            type: 'err',
-            text: data.error || 'No pudimos verificar tu email. Reenvíalo desde tu cuenta.',
-          })
-        }
-      })
-      .catch(() => {
-        setVerifyMessage({ type: 'err', text: 'Error de conexión. Intenta de nuevo.' })
-      })
-      .finally(() => setVerifying(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams])
 
   if (!user || user.emailVerified || dismissed) return null
 
@@ -101,15 +62,15 @@ export function EmailVerifyBanner() {
           <span className="text-yellow-800">
             Email de verificación reenviado a {user.email}. Revisa tu bandeja.
           </span>
-        ) : verifyMessage ? (
+        ) : result ? (
           <span
             className={
-              verifyMessage.type === 'ok'
+              result.ok
                 ? 'text-green-800 font-medium'
                 : 'text-red-800 font-medium'
             }
           >
-            {verifyMessage.text}
+            {result.message}
           </span>
         ) : (
           <>
@@ -132,7 +93,7 @@ export function EmailVerifyBanner() {
           </>
         )}
         <div className="ml-auto flex items-center gap-2">
-          {!sent && !verifying && !verifyMessage && (
+          {!sent && !verifying && !result && (
             <Button
               size="sm"
               variant="outline"
@@ -156,3 +117,4 @@ export function EmailVerifyBanner() {
     </div>
   )
 }
+

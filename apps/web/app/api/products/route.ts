@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger, serializeErr } from '@/lib/logger'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, requireVerifiedEmail } from '@/lib/auth'
 import pool from '@/lib/db'
 import { requireSameOrigin } from '@/lib/csrf'
 
@@ -75,10 +75,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
     const csrf = requireSameOrigin(req); if (csrf) return csrf
   try {
-    // CRIT audit fix: switched from verifyToken() to requireAuth() so that
-    // a revoked session (e.g. user logged out elsewhere) cannot keep creating
-    // products until the JWT naturally expires.
-    const auth = await requireAuth(req)
+    // P1-1 (audit 2026-07-27): require verified email before a seller
+    // can publish a new product. The dashboard banner promises this gate.
+    const auth = await requireVerifiedEmail(req)
     if (auth instanceof NextResponse) return auth
     const decoded = auth
 

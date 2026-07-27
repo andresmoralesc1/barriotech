@@ -15,8 +15,16 @@ interface Props {
   setIsLoading: (b: boolean) => void
   /** Pre-selected role from the URL (?role=seller) or null. */
   initialRole?: 'buyer' | 'seller'
-  /** Where to send the user after a successful registration. */
-  redirectTo: 'dashboard' | 'onboarding' | 'map'
+  /**
+   * Where to send the user after a successful registration.
+   *   - `'onboarding'` — seller → /onboarding, buyer → /map.
+   *   - `'map'`       — everyone → /map.
+   * P3-1 (audit 2026-07-27): the previous union
+   *   `'dashboard' | 'onboarding' | 'map'` had a dead `'dashboard'`
+   *   member — no caller in apps/web ever passed it. Narrowing forces
+   *   TS to flag a future mistake and keeps the routing table honest.
+   */
+  redirectTo: 'onboarding' | 'map'
 }
 
 /**
@@ -129,11 +137,7 @@ export function RegisterForm({
         emailVerified: data.user.emailVerified ?? data.emailVerified ?? false,
       })
       const target =
-        redirectTo === 'onboarding' && data.user.role !== 'seller'
-          ? '/map'
-          : redirectTo === 'dashboard'
-          ? '/dashboard'
-          : redirectTo === 'onboarding'
+        redirectTo === 'onboarding' && data.user.role === 'seller'
           ? '/onboarding'
           : '/map'
       router.push(target)
@@ -201,7 +205,7 @@ export function RegisterForm({
           spellCheck={false}
           value={contact}
           onChange={(e) => setContact(e.target.value)}
-          placeholder="tu@email.com o 300 123 4567"
+          placeholder="tu@email.com o 300 123 4567 (+57 opcional)"
           disabled={isLoading}
           className="w-full px-4 py-3 min-h-[44px] border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50"
         />
@@ -234,7 +238,7 @@ export function RegisterForm({
               spellCheck={false}
               value={altContact}
               onChange={(e) => setAltContact(e.target.value)}
-              placeholder={isContactEmail ? '300 123 4567' : 'tu@email.com'}
+              placeholder={isContactEmail ? 'tu@email.com' : '300 123 4567 (+57 opcional)'}
               disabled={isLoading}
               tabIndex={contact ? 0 : -1}
               className="w-full px-4 py-3 min-h-[44px] border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50"

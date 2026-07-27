@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger, serializeErr } from '@/lib/logger'
 import pool from '@/lib/db'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, requireVerifiedEmail } from '@/lib/auth'
 import { requireSameOrigin } from '@/lib/csrf'
 
 /**
@@ -32,7 +32,10 @@ const PRICING = {
 }
 
 async function getMyVendorId(req: NextRequest) {
-  const auth = await requireAuth(req)
+  // P1-1 (audit 2026-07-27): sponsorships are a paid flow, gate on
+  // verified email. The dashboard banner promise is enforced uniformly
+  // via requireVerifiedEmail.
+  const auth = await requireVerifiedEmail(req)
   if (auth instanceof NextResponse) return auth
 
   const r = await pool.query(

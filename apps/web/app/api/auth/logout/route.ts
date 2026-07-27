@@ -9,10 +9,11 @@ function clearCookies(response: NextResponse) {
   const isProd = process.env.NODE_ENV === 'production'
   response.cookies.set('token', '', {
     httpOnly: true,
-    // L1 (audit 2026-07-27) + L7: must match the issuing path. With
-    // AUTH_COOKIE_PATH = '/api/auth', using '/' here would not delete
-    // the cookie set by /login; the browser treats different paths as
-    // distinct cookies.
+    // L1 (audit 2026-07-27): must match the issuing path. With
+    // AUTH_COOKIE_PATH = '/', the cookie set by /login lives at '/'.
+    // Clearing at '/' removes it; a different path would leave a stale
+    // cookie under a different name in the browser jar (the browser
+    // treats different paths as distinct cookies with the same name).
     path: AUTH_COOKIE_PATH,
     maxAge: 0,
     sameSite: 'strict', // S3-SEC-3 (audit 2026-07-23)

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger, serializeErr } from '@/lib/logger'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, requireVerifiedEmail } from '@/lib/auth'
 import pool from '@/lib/db'
 import { COLOMBIA_CITIES } from '@/lib/core/constants/cities'
 import { requireSameOrigin } from '@/lib/csrf'
@@ -151,7 +151,12 @@ export async function PATCH(req: NextRequest) {
     )
   }
   try {
-    const auth = await requireAuth(req)
+    // P1-1 (audit 2026-07-27): require verified email before letting a
+    // seller publish/edit a vendor profile. The EmailVerifyBanner on the
+    // dashboard promises this gate; previously nothing enforced it, so a
+    // freshly-registered user could publish a vendor the instant they
+    // hit the form, banner still showing.
+    const auth = await requireVerifiedEmail(req)
     if (auth instanceof NextResponse) return auth
 
     if (auth.role !== 'seller') {

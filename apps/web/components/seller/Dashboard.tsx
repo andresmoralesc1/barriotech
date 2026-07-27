@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { BarChart3, Package, Settings, Edit3, ChevronRight, Camera, RefreshCw, BatteryLow, Zap } from 'lucide-react'
+import { BarChart3, Package, Settings, Edit3, ChevronRight, Camera, RefreshCw, BatteryLow, Zap, Store } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -140,10 +140,18 @@ export function DashboardContent() {
       const data = await meRes.json()
       // N16: vendors array (new) or vendor (legacy)
       const list = (data.vendors ?? (data.vendor ? [data.vendor] : [])) as VendorData[]
-      if (list.length === 0) {
-        router.push('/onboarding')
-        return
-      }
+      // P2-2 (audit 2026-07-27): instead of redirecting to /onboarding
+      // when the seller has no vendor yet, fall through and render the
+      // "no vendors yet" empty-state below. Reasons:
+      //   1. /onboarding is where the FIRST seller is created; a re-entry
+      //      from /dashboard created a second redirect loop in some
+      //      navigation flows.
+      //   2. After email verification (P1-2) a seller lands here
+      //      directly; an immediate redirect to /onboarding reads as
+      //      "wrong page" rather than "next step".
+      //   3. The dashboard is the seller's home — they should
+      //      understand why it's empty, not be teleported elsewhere.
+      // The empty state CTA points to /onboarding directly.
       setVendors(list)
 
       // Pick the active vendor: ?vendor= param > localStorage > first
@@ -324,6 +332,31 @@ export function DashboardContent() {
         </header>
 
         <div className="p-4 space-y-4">
+          {/* P2-2 (audit 2026-07-27): inline empty state when the seller
+              hasn't created their first vendor yet. Previously this
+              redirected to /onboarding; the redirect hid WHY the page
+              was empty and made navigation flows feel broken. Now we
+              stay on the dashboard (the seller's natural home) and
+              explain + CTA. */}
+          {vendors.length === 0 && (
+            <Card variant="outlined" className="p-6 text-center">
+              <div className="inline-flex w-12 h-12 items-center justify-center rounded-full bg-orange-100 mb-3">
+                <Store size={24} className="text-primary" />
+              </div>
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">
+                Aún no tienes un puesto
+              </h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Crea tu puesto para empezar a publicar productos y aparecer
+                en el mapa para los compradores de tu zona.
+              </p>
+              <Link href="/onboarding">
+                <Button className="w-full" size="lg">
+                  Crear mi puesto
+                </Button>
+              </Link>
+            </Card>
+          )}
           {vendorId && vendorData && (
             <>
               {/* N16: Vendor switcher (only shows if user has multiple) */}

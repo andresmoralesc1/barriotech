@@ -112,6 +112,16 @@ interface AppState {
   // auth-state fetch or after a short timeout.
   justLoggedOut: boolean
   setJustLoggedOut: (v: boolean) => void
+
+  // P1-5 (audit 2026-07-27): per-session dismissal of the
+  // EmailVerifyBanner. Previously local React state in the banner
+  // component reset on every navigation, so users who clicked the X to
+  // dismiss saw the banner again two pages later — classic "did this
+  // even work?" UX failure. Now we keep it in the persisted Zustand
+  // store; clearing on logout / email-verify success so the user gets
+  // a fresh prompt if verification regresses.
+  verifyBannerDismissed: boolean
+  setVerifyBannerDismissed: (v: boolean) => void
 }
 
 export const useStore = create<AppState>()(
@@ -129,6 +139,12 @@ export const useStore = create<AppState>()(
       // (where 401 is the expected path).
       justLoggedOut: false,
       setJustLoggedOut: (v) => set({ justLoggedOut: v }),
+
+      // P1-5: defaults to false. Banner dismiss resets to true; logout
+      // (which already clears user + cart + orders) also clears this so
+      // a future unverified user can see the banner again.
+      verifyBannerDismissed: false,
+      setVerifyBannerDismissed: (v) => set({ verifyBannerDismissed: v }),
 
       // Usuario
       user: null,
@@ -254,6 +270,7 @@ export const useStore = create<AppState>()(
           cart: [],
           orders: [],
           favoriteIds: [],
+          verifyBannerDismissed: false,
         })
         // Auto-clear after 30s so a future login flow isn't accidentally
         // skipped by the flag. The user will have re-entered the
@@ -277,6 +294,9 @@ export const useStore = create<AppState>()(
         filters: state.filters,
         pushNotificationsEnabled: state.pushNotificationsEnabled,
         proximityNotificationsEnabled: state.proximityNotificationsEnabled,
+        // P1-5: persist dismissal across reloads so a user who clicked
+        // X doesn't see the banner re-appear on the next page view.
+        verifyBannerDismissed: state.verifyBannerDismissed,
         // _hasHydrated and user are NOT persisted — always restored from cookie at runtime
       }),
       onRehydrateStorage: () => (state) => {

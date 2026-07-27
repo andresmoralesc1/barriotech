@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger, serializeErr } from '@/lib/logger'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, requireVerifiedEmail } from '@/lib/auth'
 import pool from '@/lib/db'
 import { isUuid } from '@/lib/core/utils/slug'
 import { parseJsonBody } from '@/lib/parse-json'
@@ -24,7 +24,9 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'ID inválido' }, { status: 400 })
     }
 
-    const auth = await requireAuth(req)
+    // P1-1 (audit 2026-07-27): require verified email before editing a
+    // product. The dashboard banner promises this gate.
+    const auth = await requireVerifiedEmail(req)
     if (auth instanceof NextResponse) return auth
 
     // Verify ownership

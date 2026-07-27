@@ -10,6 +10,7 @@ import jwt from 'jsonwebtoken'
 import type { NextRequest } from 'next/server'
 import type { TokenPayload } from './auth-edge'
 import { isTokenRevoked } from './auth-db'
+import pool from './db'
 
 export type { TokenPayload } from './auth-edge'
 
@@ -165,4 +166,67 @@ export async function requireAuth(
     }
   }
   return decoded
+}
+
+/**
+ * requireVerifiedEmail(req) — auth + email_verified check.
+ *
+ * P1-1 (audit 2026-07-27): the EmailVerifyBanner promises "Verifica tu
+ * email para crear tu puesto, dejar reseñas y contactar vendedores", but
+ * before this fix NOTHING enforced that promise — a freshly registered
+ * user could publish products, post reviews, send contact messages, and
+ * claim sponsorships all while the banner sat there telling them to
+ * verify. The banner copy was a lie.
+ *
+ * Now every mutating endpoint that "creates content" (vendor profile,
+ * products, photos, reviews, contact, sponsorships, favorites) goes
+ * through this helper. If the user is authenticated but hasn't verified
+ * their email, we return 403 with a copy that the frontend can pair with
+ * a "Resend verification" CTA.
+ *
+ * Endpoints that should NOT use this helper (they must work even for
+ * unverified users):
+ *   - GET /api/auth/me (used to populate the banner itself)
+ *   - GET /api/notifications, /api/orders, /api/favorites — reading
+ *     existing state is fine; only CREATING new state needs verification.
+ *   - DELETE /api/account — destructive on own data, no need to gate.
+ *   - /api/auth/* (login/logout/refresh/verify-email/resend-verification).
+ *
+ * Implementation note: a single SELECT for `email_verified` adds one DB
+ * round-trip per mutating request. We accept that cost (cheap, indexed
+ * PK lookup) for the contract clarity. Future optimization: stuff
+ * `email_verified` into the JWT payload so the check is local — but
+ * then a logout/revoke path that toggles email_verified invalidates
+ * tokens, which is a much bigger refactor. Not worth it today.
+ */
+export interface VerifiedUser {
+  userId: string
+  role: 'buyer' | 'seller'
+  emailVerified: true
+}
+
+export async function requireVerifiedEmail(
+  req: NextRequest
+): Promise<VerifiedUser | NextResponse> {
+  const auth = await requireAuth(req)
+  if (auth instanceof NextResponse) return auth
+
+  const result = await pool.query(
+    'SELECT email_verified FROM users WHERE id = $1',
+    [auth.userId]
+  )
+  if (result.rows.length === 0 || !result.rows[0].email_verified) {
+    return NextResponse.json(
+      {
+        error: 'Verifica tu email para usar esta función',
+        requiresEmailVerification: true,
+      },
+      { status: 403 }
+    )
+  }
+  return {
+    userId: auth.userId,
+    role: auth.role as 'buyer' | 'seller',
+    emailVerified: true,
+  }
 }

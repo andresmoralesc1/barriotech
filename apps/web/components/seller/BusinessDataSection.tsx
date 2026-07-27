@@ -60,7 +60,7 @@ export function BusinessDataSection({
         type="tel"
         value={phone}
         onChange={(e) => onPhoneChange(e.target.value)}
-        placeholder="Ej: 300 123 4567"
+        placeholder="Ej: 300 123 4567 (+57 opcional)"
       />
 
       <div className="flex flex-col gap-1">

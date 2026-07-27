@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger, serializeErr } from '@/lib/logger'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, requireVerifiedEmail } from '@/lib/auth'
 import { isUuid } from '@/lib/core/utils/slug'
 import pool from '@/lib/db'
 import { checkRateLimit } from '@/lib/rate-limit'
@@ -24,36 +24,18 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const auth = await requireAuth(req)
+    // P1-1 (audit 2026-07-27): require verified email before posting a
+    // review. The EmailVerifyBanner promises "Verifica tu email para ...
+    // dejar reseñas"; previously this gate was disabled (2026-07-22) when
+    // registration defaulted to email_verified=true. Now that we may have
+    // unverified accounts again, re-enable via requireVerifiedEmail().
+    const auth = await requireVerifiedEmail(req)
     if (auth instanceof NextResponse) return auth
     const userId = auth.userId
 
     if (auth.role !== 'buyer') {
       return NextResponse.json({ error: 'Solo compradores pueden dejar reseñas' }, { status: 403 })
     }
-
-    // Email verification gate — DISABLED 2026-07-22 (feature-paused, NOT deleted).
-    // Same rationale as POST /api/vendors: reviews are public and influence
-    // vendor visibility. We still query the column to keep the code path hot
-    // but no longer block on the result — new users are created with
-    // email_verified=true so this gate is a no-op for them.
-    //
-    // To re-enable: uncomment the `if (verified.rows[0]?.email_verified === false)`
-    // branch below.
-    // ──────────────────────────────────────────────────────────────────
-    const verified = await pool.query(
-      'SELECT email_verified FROM users WHERE id = $1',
-      [userId]
-    )
-    // if (verified.rows[0]?.email_verified === false) {
-    //   return NextResponse.json(
-    //     {
-    //       error: 'Verifica tu email antes de dejar una reseña.',
-    //       requiresEmailVerification: true,
-    //     },
-    //     { status: 403 }
-    //   )
-    // }
 
     let body: unknown
     try {
