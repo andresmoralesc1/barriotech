@@ -64,25 +64,80 @@ export const logger = pino({
     : {}),
 })
 
+// Fields whose VALUES must be redacted from any object passed to the logger.
+// These can show up if a route accidentally logs req.headers / req.body on
+// error. Default sets to "[REDACTED]" and recurses one level deep so the
+// structure stays scannable.
+const SENSITIVE_KEYS = new Set([
+  'password', 'pass', 'pwd', 'token', 'authorization',
+  'refresh-token', 'refresh_token', 'access_token', 'access-token',
+  'session', 'cookie', 'set-cookie',
+  'email_verification_token', 'email_verification', 'verify_token',
+  'reset_token', 'reset-token',
+  'secret', 'jwt', 'csrf', 'x-csrf', 'x-csrf-token',
+  'email_token', 'magic-link',
+  'api_key', 'api-key', 'apikey',
+  'credit_card', 'credit-card', 'card', 'cvv', 'cvc',
+  'private_key', 'private-key',
+])
+
+// Recursive shallow redact — handles common shapes we encounter in log
+// contexts: { err: { ... } }, { body: { ... } }, { headers: { ... } }.
+// Doesn't try to handle Map/Set/circular refs; that's out of scope.
+function redact<T>(input: T, seen: WeakSet<object> = new WeakSet()): T {
+  if (input === null || typeof input !== 'object') return input
+  if (seen.has(input as object)) return input
+  seen.add(input as object)
+
+  if (Array.isArray(input)) {
+    return input.map((v) => redact(v, seen)) as unknown as T
+  }
+
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    if (SENSITIVE_KEYS.has(k)) {
+      out[k] = '[REDACTED]'
+    } else if (v && typeof v === 'object' && Object.keys(v).length <= 25) {
+      // Only recurse one level deep for normal use — keeps perf bounded.
+      out[k] = redact(v, seen)
+    } else {
+      out[k] = v
+    }
+  }
+  return out as unknown as T
+}
+
 /**
  * Convenience: log an error with the standard error fields extracted.
  *
  * Usage:
  *   logger.error(serializeErr(err), 'auth/login failed')
+ *
+ * L3 (audit 2026-07-27): AUTOMATICALLY redacts known sensitive keys before
+ * return. Pass `serializeErr(err, { extra: req.body })` and the body field
+ * will be safely scrubbed — this prevents the classic "logger.error(err, body)"
+ * foot-gun where raw passwords, tokens, or cookies land in log aggregators.
  */
-export function serializeErr(err: unknown): Record<string, unknown> {
-  if (err instanceof Error) {
-    return {
-      err: {
-        message: err.message,
-        name: err.name,
-        stack: err.stack,
-        ...((err as any).code !== undefined ? { code: (err as any).code } : {}),
-        ...((err as any).detail !== undefined ? { detail: (err as any).detail } : {}),
-      },
-    }
+export function serializeErr(
+  err: unknown,
+  extra?: Record<string, unknown>
+): Record<string, unknown> {
+  const base: Record<string, unknown> = err instanceof Error
+    ? {
+        err: {
+          message: err.message,
+          name: err.name,
+          stack: err.stack,
+          ...((err as any).code !== undefined ? { code: (err as any).code } : {}),
+          ...((err as any).detail !== undefined ? { detail: (err as any).detail } : {}),
+        },
+      }
+    : { err: { message: String(err) } }
+
+  if (extra) {
+    return { ...base, ...redact(extra) }
   }
-  return { err: { message: String(err) } }
+  return base
 }
 
 export type Logger = typeof logger

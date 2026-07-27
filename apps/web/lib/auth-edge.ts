@@ -49,8 +49,25 @@ const JWT_AUDIENCE = 'barriotech.gps.api'
  */
 export async function verifyTokenEdge(token: string): Promise<TokenPayload | null> {
   if (!secretKey) return null
+  const checked = await verifyTokenWithIatCheck(token, secretKey)
+  if (checked) return checked
+  if (previousKey) {
+    return verifyTokenWithIatCheck(token, previousKey)
+  }
+  return null
+}
+
+/**
+ * L9 (audit 2026-07-27): extract of verifyTokenWithIatCheck — shared with
+ * lib/auth.ts so middleware and API routes reject iat-skewed tokens
+ * with the same threshold.
+ */
+async function verifyTokenWithIatCheck(
+  token: string,
+  key: Uint8Array
+): Promise<TokenPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, secretKey, {
+    const { payload } = await jwtVerify(token, key, {
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
       // Mirror lib/auth.ts so middleware and API routes agree on the
@@ -58,20 +75,14 @@ export async function verifyTokenEdge(token: string): Promise<TokenPayload | nul
       // rejections at the 15-min token boundary.
       clockTolerance: 5,
     })
+    const nowSec = Math.floor(Date.now() / 1000)
+    const maxIatSkewSec = 30
+    const iat = (payload as { iat?: number }).iat
+    if (typeof iat === 'number' && iat - nowSec > maxIatSkewSec) {
+      return null
+    }
     return payload as unknown as TokenPayload
   } catch {
-    if (previousKey) {
-      try {
-        const { payload } = await jwtVerify(token, previousKey, {
-          issuer: JWT_ISSUER,
-          audience: JWT_AUDIENCE,
-          clockTolerance: 5,
-        })
-        return payload as unknown as TokenPayload
-      } catch {
-        return null
-      }
-    }
     return null
   }
 }

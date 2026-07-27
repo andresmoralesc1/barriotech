@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { AUTH_COOKIE_PATH } from '@/lib/auth-cookies'
 import { logger, serializeErr } from '@/lib/logger'
 import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
@@ -175,17 +176,29 @@ export async function POST(req: NextRequest) {
 
       if (userResult.rows.length === 0) {
         await client.query('ROLLBACK')
+        // L8 (audit 2026-07-27): collapse to a SINGLE generic error so an
+        // attacker can't enumerate which identifier is the duplicate. The
+        // server still knows which one matched (logged below for ops),
+        // but the wire response is identical regardless of whether the
+        // email, the phone, or both already exist.
+        let collidingField: 'email' | 'phone' | null = null
         if (cleanEmail) {
           const dup = await client.query('SELECT 1 FROM users WHERE email = $1 LIMIT 1', [cleanEmail])
-          if (dup.rows.length > 0) {
-            return NextResponse.json({ error: 'El email ya está registrado' }, { status: 400 })
-          }
+          if (dup.rows.length > 0) collidingField = 'email'
         }
-        if (cleanPhone) {
+        if (!collidingField && cleanPhone) {
           const dup = await client.query('SELECT 1 FROM users WHERE phone = $1 LIMIT 1', [cleanPhone])
-          if (dup.rows.length > 0) {
-            return NextResponse.json({ error: 'El teléfono ya está registrado' }, { status: 400 })
-          }
+          if (dup.rows.length > 0) collidingField = 'phone'
+        }
+        if (collidingField) {
+          // Internal observability: structured log on which field collided
+          // (devs + SIEM can debug). The client-facing message is generic.
+          logger.warn({ event: 'register_duplicate', field: collidingField, ip: getClientIp(req) },
+            'register attempted with already-registered identifier')
+          return NextResponse.json(
+            { error: 'Ya existe una cuenta con estos datos. Si eres tú, intenta iniciar sesión.' },
+            { status: 409 }
+          )
         }
         return NextResponse.json({ error: 'No se pudo crear la cuenta. Verifica email y teléfono.' }, { status: 400 })
       }
@@ -293,14 +306,15 @@ export async function POST(req: NextRequest) {
     const isProd = process.env.NODE_ENV === 'production'
     response.cookies.set('token', token, {
       httpOnly: true,
-      path: '/',
+      // L1 (audit 2026-07-27): scope to /api/auth.
+      path: AUTH_COOKIE_PATH,
       maxAge: 60 * 15,
       sameSite: 'strict',
       secure: isProd,
     })
     response.cookies.set('refresh-token', refreshToken, {
       httpOnly: true,
-      path: '/',
+      path: AUTH_COOKIE_PATH,
       maxAge: 60 * 60 * 24 * 7,
       sameSite: 'strict',
       secure: isProd,

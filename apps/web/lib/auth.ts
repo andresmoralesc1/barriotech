@@ -42,8 +42,34 @@ const JWT_AUDIENCE = 'barriotech.gps.api'
  * For revocation-aware checks use requireAuth() below.
  */
 export async function verifyToken(token: string): Promise<TokenPayload | null> {
+  const checked = await verifyTokenWithIatCheck(token, secretKey)
+  if (checked) return checked
+  if (previousKey) {
+    return verifyTokenWithIatCheck(token, previousKey)
+  }
+  return null
+}
+
+/**
+ * Verify a JWT AND enforce iat ≤ now + tolerance.
+ *
+ * L9 (audit 2026-07-27): defense against "iat in the future" tokens.
+ * If a server's clock is skewed or an attacker mints a token with
+ * iat = now() + 24h, the token would otherwise be considered
+ * valid for 24h+15min instead of just 15min from the moment it was
+ * actually minted. With this guard, any token whose iat is more than
+ * `maxIatSkewSec` seconds ahead of the verifier's clock is rejected.
+ *
+ * The check is wrapped around jwtVerify so future-clock tokens never
+ * reach the application payload. clockTolerance (5s above) handles
+ * backward skew on the same clock; this guard handles forward skew.
+ */
+async function verifyTokenWithIatCheck(
+  token: string,
+  key: Uint8Array
+): Promise<TokenPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, secretKey, {
+    const { payload } = await jwtVerify(token, key, {
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
       // Tolerate up to 5s of clock drift between the issuer (PM2 process)
@@ -51,20 +77,17 @@ export async function verifyToken(token: string): Promise<TokenPayload | null> {
       // 5s cushion prevents a stray "Token inválido" at the boundary.
       clockTolerance: 5,
     })
+    // Reject iat drift larger than the clockTolerance window. Use 30s
+    // so we don't punish legitimate 5-10s drift at the boundary while
+    // still catching 1h+ fakes.
+    const nowSec = Math.floor(Date.now() / 1000)
+    const maxIatSkewSec = 30
+    const iat = (payload as { iat?: number }).iat
+    if (typeof iat === 'number' && iat - nowSec > maxIatSkewSec) {
+      return null
+    }
     return payload as unknown as TokenPayload
   } catch {
-    if (previousKey) {
-      try {
-        const { payload } = await jwtVerify(token, previousKey, {
-          issuer: JWT_ISSUER,
-          audience: JWT_AUDIENCE,
-          clockTolerance: 5,
-        })
-        return payload as unknown as TokenPayload
-      } catch {
-        return null
-      }
-    }
     return null
   }
 }

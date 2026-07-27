@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { AUTH_COOKIE_PATH } from '@/lib/auth-cookies'
 import { logger, serializeErr } from '@/lib/logger'
+import { withRequest } from '@/lib/request-context'
 import { verifyToken, getTokenFromRequest, signTokenSync } from '@/lib/auth'
 import { isTokenRevoked } from '@/lib/auth-db'
+import pool from '@/lib/db'
 
 /**
  * POST /api/auth/refresh
@@ -42,6 +45,7 @@ import { isTokenRevoked } from '@/lib/auth-db'
  * + call, NOT a global toggle.
  */
 export async function POST(req: NextRequest) {
+  const log = withRequest(req, 'POST /api/auth/refresh')
   try {
     // Try access token first, fall back to refresh-token cookie.
     const accessToken = getTokenFromRequest(req)
@@ -62,31 +66,60 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Sesión revocada' }, { status: 401 })
     }
 
+    // L2 (audit 2026-07-27): rotate refresh tokens on every refresh-token use.
+    //
+    // Why: when a refresh token is reused, it stays valid for the full
+    // 7-day lifetime. If an attacker steals the cookie from a backup
+    // file or a logged-out-but-not-purged browser, they get 7 days of
+    // free replay.
+    //
+    // Rotation: when the request used the refresh-token cookie (not the
+    // access token), we bump token_version in the DB. The cookie the
+    // caller is about to receive carries the NEW version; the old refresh
+    // token's embedded version no longer matches, so a replay returns
+    // 401 "Sesión revocada".
+    //
+    // Trade-off: two tabs refreshing at the same time will cause the
+    // slower one to 401 (the version it sent is stale). Acceptable —
+    // users rarely refresh concurrently, and the user-facing failure
+    // mode is "log in again" via the normal expired-cookie UI.
+    //
+    // Edge case: if the access token was used (not refresh-token), we
+    // keep the existing tokenVersion. No need to bump because the access
+    // token expires in 15min on its own.
+    let currentTokenVersion = decoded.tokenVersion
+    if (!accessToken && refreshToken) {
+      await pool.query(
+        'UPDATE profiles SET token_version = token_version + 1 WHERE user_id = $1',
+        [decoded.userId]
+      )
+      currentTokenVersion = currentTokenVersion + 1
+      log.info({ userId: decoded.userId }, 'refresh token rotated')
+    }
+
     // Issue a fresh access token with the SAME tokenVersion.
     const freshAccessToken = signTokenSync(
       {
         userId: decoded.userId,
         email: decoded.email,
         role: decoded.role,
-        tokenVersion: decoded.tokenVersion,
+        tokenVersion: currentTokenVersion,
       },
       '15m'
     )
 
-    // Optionally re-issue a 7-day refresh token if the caller used the access token.
-    // If they used the refresh token, we keep the same one to avoid runaway issuance.
-    let freshRefreshToken: string | undefined
-    if (accessToken && !refreshToken) {
-      freshRefreshToken = signTokenSync(
-        {
-          userId: decoded.userId,
-          email: decoded.email,
-          role: decoded.role,
-          tokenVersion: decoded.tokenVersion,
-        },
-        '7d'
-      )
-    }
+    // ALWAYS re-issue a 7-day refresh token, regardless of which cookie
+    // the caller used. The new refresh token carries the rotated
+    // currentTokenVersion, so the old one (if any) becomes stale.
+    const freshRefreshToken = signTokenSync(
+      {
+        userId: decoded.userId,
+        email: decoded.email,
+        role: decoded.role,
+        tokenVersion: currentTokenVersion,
+      },
+      '7d'
+    )
 
     // Token is set via httpOnly cookies only — never echo it in the body
     const response = NextResponse.json({
@@ -102,23 +135,22 @@ export async function POST(req: NextRequest) {
       // depth on top of the Origin/Referer CSRF check in lib/csrf.ts
       // (S3-SEC-4 below).
       sameSite: 'strict',
-      maxAge: 60 * 15, // 15 min — matches access token
-      path: '/',
+      maxAge: 60 * 15, // 15 min
+      // L1 (audit 2026-07-27): scope cookie to /api/auth.
+      path: AUTH_COOKIE_PATH,
     })
 
-    if (freshRefreshToken) {
-      response.cookies.set('refresh-token', freshRefreshToken, {
-        httpOnly: true,
-        secure: isProd,
-        // S3-SEC-3 (audit 2026-07-23): changed SameSite from 'lax' to 'strict'.
-      // See apps/web/app/api/auth/login/route.ts for rationale. Defense in
-      // depth on top of the Origin/Referer CSRF check in lib/csrf.ts
-      // (S3-SEC-4 below).
+    // L2 (audit 2026-07-27): always set the refresh cookie with the
+    // rotated token. The browser overwrites the existing cookie in
+    // place (same name + path + maxAge); the OLD refresh token is now
+    // unusable because its embedded version no longer matches.
+    response.cookies.set('refresh-token', freshRefreshToken, {
+      httpOnly: true,
+      secure: isProd,
       sameSite: 'strict',
-        maxAge: 60 * 60 * 24 * 7, // 7 days
-        path: '/',
-      })
-    }
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: AUTH_COOKIE_PATH,
+    })
 
     return response
   } catch (err) {

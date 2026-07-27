@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { AUTH_COOKIE_PATH } from '@/lib/auth-cookies'
 import { logger, serializeErr } from '@/lib/logger'
 import { withRequest, withRequestIdHeader, getRequestId, jsonWithRequestId } from '@/lib/request-context'
 import { captureApiError, readRequestId } from '@/lib/sentry-helpers'
@@ -9,6 +10,7 @@ import { checkRateLimit } from '@/lib/rate-limit'
 import { getClientIp } from '@/lib/trusted-ip'
 import { isEmail, normalizeEmail, normalizePhone } from '@/lib/auth-helpers'
 import { parseJsonBody } from '@/lib/parse-json'
+import { hashForAudit } from '@/lib/audit-hash'
 
 // Defense against user-enumeration via response timing:
 // On startup we hash a fixed string with bcrypt cost 12 so the dummy-hash path
@@ -123,6 +125,16 @@ export async function POST(req: NextRequest) {
     // same ("Credenciales inválidas") so neither path leaks which field is wrong.
     if (result.rows.length === 0) {
       await bcrypt.compare(password, await getDummyHash())
+      // L5 (audit 2026-07-27): structured audit log so SIEM can spot
+      // brute-force attempts by IP. The identifier is hashed (NOT logged
+      // in clear) to avoid leaking which accounts attackers are probing.
+      log.warn({
+        event: 'login_failure',
+        reason: 'unknown_identifier',
+        identifierHash: hashForAudit(lookupValue),
+        channel: lookupColumn,
+        ip: getClientIp(req),
+      }, 'login failure')
       return jsonWithRequestId(req, { error: 'Credenciales inválidas' }, { status: 401 })
     }
 
@@ -131,12 +143,29 @@ export async function POST(req: NextRequest) {
     if (!user.is_active) {
       // Same timing even for inactive users — hash to mask the deactivated branch.
       await bcrypt.compare(password, user.password_hash)
+      // L5: deactivated accounts emit a separate audit tag so SIEM can
+      // spot attempts to brute-force suspended users specifically.
+      log.warn({
+        event: 'login_failure',
+        reason: 'account_inactive',
+        userId: user.id,
+        ip: getClientIp(req),
+      }, 'login failure (account inactive)')
       return jsonWithRequestId(req, { error: 'Credenciales inválidas' }, { status: 401 })
     }
 
     const validPassword = await bcrypt.compare(password, user.password_hash)
 
     if (!validPassword) {
+      // L5: wrong-password failure. Don't include the userId — at this
+      // point the "user" is identified only by the hashed identifier.
+      log.warn({
+        event: 'login_failure',
+        reason: 'wrong_password',
+        identifierHash: hashForAudit(lookupValue),
+        channel: lookupColumn,
+        ip: getClientIp(req),
+      }, 'login failure (wrong password)')
       return jsonWithRequestId(req, { error: 'Credenciales inválidas' }, { status: 401 })
     }
 
@@ -177,7 +206,8 @@ export async function POST(req: NextRequest) {
     const isProd = process.env.NODE_ENV === 'production'
     response.cookies.set('token', token, {
       httpOnly: true,
-      path: '/',
+      // L1 (audit 2026-07-27): scope to /api/auth.
+      path: AUTH_COOKIE_PATH,
       maxAge: 60 * 15, // 15 minutes — matches access token expiry
       // S3-SEC-3 (audit 2026-07-23): changed SameSite from 'lax' to 'strict'.
       // Lax allowed the auth cookies to ride along on top-level cross-site
@@ -195,7 +225,7 @@ export async function POST(req: NextRequest) {
     })
     response.cookies.set('refresh-token', refreshToken, {
       httpOnly: true,
-      path: '/',
+      path: AUTH_COOKIE_PATH,
       maxAge: 60 * 60 * 24 * 7, // 7 days
       // S3-SEC-3 (audit 2026-07-23): changed SameSite from 'lax' to 'strict'.
       // Lax allowed the auth cookies to ride along on top-level cross-site
@@ -213,6 +243,15 @@ export async function POST(req: NextRequest) {
     })
 
     log.info({ userId: user.id, role: user.role }, 'login success')
+
+    // L6 (audit 2026-07-27): bump last_login_at on every successful
+    // authentication. Best-effort fire-and-forget style — a transient
+    // DB error here must not break login itself. The audit value is
+    // already captured by the success log line above.
+    void pool.query(
+      'UPDATE users SET last_login_at = NOW() WHERE id = $1',
+      [user.id]
+    ).catch((err) => log.warn(serializeErr(err), 'last_login_at update failed'))
 
     // Sprint 9 C.2: echo the request id so the client can correlate logs.
     return withRequestIdHeader(response, getRequestId(req))

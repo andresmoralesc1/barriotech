@@ -3,21 +3,26 @@ import { logger, serializeErr } from '@/lib/logger'
 import pool from '@/lib/db'
 import { verifyToken } from '@/lib/auth'
 import { requireSameOrigin } from '@/lib/csrf'
+import { AUTH_COOKIE_PATH } from '@/lib/auth-cookies'
 
 function clearCookies(response: NextResponse) {
   const isProd = process.env.NODE_ENV === 'production'
   response.cookies.set('token', '', {
     httpOnly: true,
-    path: '/',
+    // L1 (audit 2026-07-27) + L7: must match the issuing path. With
+    // AUTH_COOKIE_PATH = '/api/auth', using '/' here would not delete
+    // the cookie set by /login; the browser treats different paths as
+    // distinct cookies.
+    path: AUTH_COOKIE_PATH,
     maxAge: 0,
-    sameSite: 'strict', // S3-SEC-3 (audit 2026-07-23) — see login route
+    sameSite: 'strict', // S3-SEC-3 (audit 2026-07-23)
     secure: isProd,
   })
   response.cookies.set('refresh-token', '', {
     httpOnly: true,
-    path: '/',
+    path: AUTH_COOKIE_PATH,
     maxAge: 0,
-    sameSite: 'strict', // S3-SEC-3 (audit 2026-07-23) — see login route
+    sameSite: 'strict',
     secure: isProd,
   })
 }
