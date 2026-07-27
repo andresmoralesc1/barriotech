@@ -103,7 +103,7 @@ interface AppState {
   setVendorProducts: (products: any[]) => void
 
   // Logout
-  logout: () => void
+  logout: () => Promise<void>
 
   // Sprint 11 B-AUTH-4 (2026-07-24): intent flag set by `logout()` so
   // subsequent 401s (e.g. AuthInitializer's /api/auth/me on the new

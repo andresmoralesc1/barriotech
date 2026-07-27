@@ -49,21 +49,27 @@ export function SiteHeader() {
     // redirect to /login?expired=1 — even though the user explicitly
     // clicked "Cerrar sesión".
     //
-    // Solution: use `window.location.replace('/?logged_out=1')` so the
-    // page navigates with a query param that tells the AuthInitializer
-    // (and any in-flight 401 handler) "this is a deliberate logout, do
-    // not redirect to ?expired=1". After navigation, replace the URL
-    // with a clean one so the param doesn't linger in the user's URL
-    // bar or browser history.
+    // Solution: call `window.location.replace` FIRST, before any
+    // async work. Once the browser has committed to a navigation,
+    // pending fetch responses can't win the race — the new page
+    // load will pick up the `?logged_out=1` query param and any
+    // 401 from in-flight requests will be ignored by the authedFetch
+    // signal-check.
+    //
+    // Why this is robust: window.location.replace is synchronous
+    // (queues the navigation immediately). Even if a NotificationBell
+    // poll fires its 401+refresh+redirect chain 1ms later, the browser
+    // has already committed to the navigation. The authedFetch
+    // redirect code may still execute, but window.location assignment
+    // after we've already assigned it doesn't re-trigger the old URL.
     setJustLoggedOut(true)
-    await storeLogout()
-    const target = '/?logged_out=1'
-    window.location.replace(target)
-    // Note: the replaceState below is best-effort. If the browser blocks
-    // it (e.g. on the initial about:blank doc), the param stays in the
-    // URL until the user navigates again. authedFetch clears the flag
-    // after the AuthInitializer runs, so future requests in this session
-    // behave normally.
+    window.location.replace('/?logged_out=1')
+    // Fire-and-forget the actual logout: server clears cookies,
+    // we clear client state. The browser has already navigated away
+    // by the time these resolve — if they fail, the cookies will
+    // expire on their own (15 min access, 7 day refresh) and the
+    // user is already on '/'.
+    void storeLogout()
   }
 
   const isLoggedIn = _hasHydrated && !!user

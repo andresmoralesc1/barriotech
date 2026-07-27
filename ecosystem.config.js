@@ -49,6 +49,10 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: '3005',
+        // Must match the public site Origin. If this stays at localhost,
+        // requireSameOrigin() 403s every upload / profile PATCH from
+        // https://gps.andresmorales.com.co (browsers send that Origin).
+        APP_ORIGIN: 'https://gps.andresmorales.com.co',
       },
       // Out-of-band log files. pm2-logrotate watches these and rotates when
       // either exceeds 50M. We keep 10 compressed copies.
