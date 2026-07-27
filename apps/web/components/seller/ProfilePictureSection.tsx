@@ -24,7 +24,10 @@ export function ProfilePictureSection({ photoUrl, onPhotoChange }: Props) {
         />
         <div>
           <p className="text-sm font-medium text-gray-700">Foto del negocio</p>
-          <p className="text-xs text-gray-400">PNG o JPG, máx 5MB</p>
+          {/* FIELD-FIX v4 (2026-07-27): synced to the 10MB cap enforced by
+              /api/upload + ImageUpload.tsx. The 5MB number here was stale
+              copy from before the cap was raised. */}
+          <p className="text-xs text-gray-400">PNG o JPG, máx 10MB</p>
         </div>
       </div>
     </Card>

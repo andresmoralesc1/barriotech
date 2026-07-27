@@ -209,6 +209,44 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
+    // CRIT-25: photoUrl can be an http(s) absolute URL OR a relative
+    // /storage/... path produced by /api/upload. Reject any other
+    // scheme (javascript:, data:, vbscript:, file:) so a malicious
+    // seller can't inject payloads through their photoUrl — the value
+    // is rendered in <img src> on vendor cards AND in <a href> on the
+    // buyer's vendor detail page.
+    //
+    // Mirrors /api/vendors/[id]/route.ts but adds the relative-path
+    // case so the field-agent onboarding flow (which uploads via
+    // /api/upload → /storage/vendors/{uuid}.jpg → PATCH here) keeps
+    // working.
+    if (body.photoUrl !== undefined && body.photoUrl !== null && body.photoUrl !== '') {
+      if (typeof body.photoUrl !== 'string') {
+        return NextResponse.json({ error: 'photoUrl debe ser una cadena' }, { status: 400 })
+      }
+      const isAbsoluteHttp = /^https?:\/\//i.test(body.photoUrl)
+      const isRelativeStorage = body.photoUrl.startsWith('/storage/')
+      if (!isAbsoluteHttp && !isRelativeStorage) {
+        return NextResponse.json(
+          { error: 'photoUrl debe ser una URL http(s) absoluta o una ruta /storage/...' },
+          { status: 400 }
+        )
+      }
+    }
+    if (body.vehiclePhotoUrl !== undefined && body.vehiclePhotoUrl !== null && body.vehiclePhotoUrl !== '') {
+      if (typeof body.vehiclePhotoUrl !== 'string') {
+        return NextResponse.json({ error: 'vehiclePhotoUrl debe ser una cadena' }, { status: 400 })
+      }
+      const isAbsoluteHttp = /^https?:\/\//i.test(body.vehiclePhotoUrl)
+      const isRelativeStorage = body.vehiclePhotoUrl.startsWith('/storage/')
+      if (!isAbsoluteHttp && !isRelativeStorage) {
+        return NextResponse.json(
+          { error: 'vehiclePhotoUrl debe ser una URL http(s) absoluta o una ruta /storage/...' },
+          { status: 400 }
+        )
+      }
+    }
+
     // Client camelCase → DB snake_case. Keys not in this map are ignored.
     const clientToDb: Record<string, string> = {
       name: 'name',

@@ -1,20 +1,20 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Camera, Package, MapPin, MessageCircle, ChevronRight, ChevronLeft } from 'lucide-react'
+import { Package, MapPin, MessageCircle, ChevronRight, ChevronLeft } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { VendorFormSlide } from './VendorFormSlide'
 import { LocationCaptureSlide } from './LocationCaptureSlide'
+import { PhotoUploadSlide } from './PhotoUploadSlide'
 
 const STORAGE_KEY = 'seller_onboarding_done'
 
+// FIELD-FIX v4 (2026-07-27): the "📸 Tu foto de perfil" slide used to be
+// a static tip-only slide. The actual photo upload lived on
+// /profile/edit, which field-onboarded sellers never reached. We replaced
+// the static slide with PhotoUploadSlide at step index 2 (real upload
+// component, persists to /api/vendors/me on Continuar).
 const SLIDES = [
-  {
-    title: '📸 Tu foto de perfil',
-    description: 'Añade una foto clara de ti o de tu negocio para que los compradores te reconozcan.',
-    Icon: Camera,
-    tip: 'Usa buena iluminación y asegúrate de que se vea tu rostro o logo.',
-  },
   {
     title: '📦 Tus productos',
     description: 'Agrega los productos que vendes con fotos, precios y descripciones atractivas.',
@@ -48,19 +48,15 @@ interface SellerOnboardingSliderProps {
 }
 
 export function SellerOnboardingSlider({ onComplete, onSkip }: SellerOnboardingSliderProps) {
-  // FIELD-FIX (2026-07-27): added LocationCaptureSlide as step 1,
-  // pushing the educational slides to 2..N. The form (step 0) is
-  // still mandatory and pre-creates the vendor with city-center
-  // coords; the GPS step lets the seller refine before the buyer
-  // map query picks them up.
-  //
   // Step index map:
   //   0: VendorFormSlide       (mandatory — creates the vendor)
   //   1: LocationCaptureSlide  (optional — refines the pin)
-  //   2..N: educational SLIDES  (skippable)
-  const TOTAL_STEPS = SLIDES.length + 2
+  //   2: PhotoUploadSlide      (optional — uploads the profile photo)
+  //   3..N: educational SLIDES (skippable)
+  const TOTAL_STEPS = SLIDES.length + 3
   const [current, setCurrent] = useState(0)
   const [vendor, setVendor] = useState<VendorCreated | null>(null)
+  const [photoUrl, setPhotoUrl] = useState<string>('')
 
   // Check if already completed on mount
   useEffect(() => {
@@ -100,12 +96,23 @@ export function SellerOnboardingSlider({ onComplete, onSkip }: SellerOnboardingS
     goNext()
   }
 
+  const handlePhotoSaved = (url: string) => {
+    setPhotoUrl(url)
+    goNext()
+  }
+
+  const handlePhotoSkip = () => {
+    // Keep the existing photoUrl state (could be empty if no upload
+    // happened yet, or set by a prior step); advance the slider.
+    goNext()
+  }
+
   const handleSkip = () => {
     localStorage.setItem(STORAGE_KEY, 'true')
     onSkip?.()
   }
 
-  // Render: form (step 0) → location (step 1) → educational (step 2..N)
+  // Render: form (step 0) → location (step 1) → photo (step 2) → educational (step 3..N)
   if (current === 0) {
     return (
       <div className="min-h-screen flex flex-col bg-white px-6">
@@ -129,7 +136,19 @@ export function SellerOnboardingSlider({ onComplete, onSkip }: SellerOnboardingS
     )
   }
 
-  const slide = SLIDES[current - 2]
+  if (current === 2) {
+    return (
+      <div className="min-h-screen flex flex-col bg-white px-6">
+        <PhotoUploadSlide
+          initialPhotoUrl={photoUrl || null}
+          onSaved={handlePhotoSaved}
+          onSkip={handlePhotoSkip}
+        />
+      </div>
+    )
+  }
+
+  const slide = SLIDES[current - 3]
   const IconComponent = slide.Icon
 
   return (
