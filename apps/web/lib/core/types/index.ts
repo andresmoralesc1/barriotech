@@ -1,4 +1,4 @@
-export type UserRole = 'buyer' | 'seller'
+export type UserRole = 'buyer' | 'seller' | 'admin'
 
 export type VendorCategory =
   | 'frutas'

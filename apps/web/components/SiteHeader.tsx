@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
-import { Menu, X, MapPin, User, LogIn, LogOut, ChevronDown } from 'lucide-react'
+import { Menu, X, MapPin, User, LogIn, LogOut, ChevronDown, Shield } from 'lucide-react'
 import { Button } from './ui/Button'
 import { NotificationBell } from './notifications/NotificationBell'
 import { EmailVerifyBanner } from './EmailVerifyBanner'
@@ -80,6 +80,8 @@ export function SiteHeader() {
     { href: '/contacto', label: 'Contacto' },
   ]
 
+  const isAdmin = user?.role === 'admin'
+
   return (
     <header
       className={`sticky top-0 z-50 transition-[background-color,box-shadow,backdrop-filter] duration-300 ease-out ${
@@ -142,6 +144,30 @@ export function SiteHeader() {
                 </Link>
               )
             })}
+            {/* Admin link — only for role='admin'. Shield icon signals
+                elevated privilege and isn't used elsewhere on the site. */}
+            {isAdmin && (
+              <Link
+                href="/admin"
+                aria-current={pathname.startsWith('/admin') ? 'page' : undefined}
+                className={
+                  'relative px-4 py-2 text-sm font-medium rounded-xl transition-colors flex items-center gap-1.5 ' +
+                  (pathname.startsWith('/admin')
+                    ? 'text-amber-700 bg-amber-50'
+                    : 'text-amber-700 hover:text-amber-900 hover:bg-amber-50')
+                }
+              >
+                <Shield size={14} aria-hidden="true" />
+                Admin
+                <span
+                  className={
+                    'absolute left-3 right-3 -bottom-0.5 h-0.5 rounded-full bg-amber-500 transition-all duration-300 ' +
+                    (pathname.startsWith('/admin') ? 'opacity-100 scale-x-100' : 'opacity-0 scale-x-0')
+                  }
+                  aria-hidden="true"
+                />
+              </Link>
+            )}
           </nav>
 
           {/* Desktop Auth */}
@@ -265,6 +291,17 @@ export function SiteHeader() {
                   {l.label}
                 </Link>
               ))}
+              {/* Admin link in mobile — same gating as desktop */}
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-amber-700 hover:bg-amber-50 rounded-xl transition-all"
+                >
+                  <Shield size={16} className="text-amber-700" />
+                  Admin
+                </Link>
+              )}
             </div>
 
             {isLoggedIn ? (

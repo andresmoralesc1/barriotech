@@ -1,33 +1,32 @@
 /**
  * /admin — super admin dashboard (server component).
  *
- * Lists all vendors and clients with filters and infinite-scroll-y
- * pagination. The pages are split into two client components:
- *   - AdminVendorsTab
- *   - AdminClientsTab
- * and the highlight state is a URL query param so the tab survives
- * reload and can be linked.
+ * Lists all vendors and clients with filters and pagination, with a
+ * detail drawer for vendor admin actions.
  *
- * Auth: requireAdmin() runs on the server. A non-admin who tries to
- * GET this page is redirected to /dashboard with a no-op effect.
- * (API routes still return 403 — the page redirect is for UX.)
+ * Auth: in a server component we don't have a NextRequest object, so we
+ * read the token directly from the cookie store and verify it with the
+ * edge-safe helpers (no DB call — the proxy already enforced role on
+ * /api/* and the page is read-only). The DB-bound requireAdmin() runs
+ * inside the API endpoints that the page fetches, which is the real
+ * trust boundary.
+ *
+ * The 403 here is a UX guard, not a security one — it keeps an
+ * unauthenticated user from seeing a flash of the admin shell.
  */
 
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
-import { requireAdmin } from '@/lib/auth'
+import { verifyTokenEdge } from '@/lib/auth-edge'
 import { AdminPanel } from './admin-panel'
 
 export default async function AdminPage() {
   const cookieStore = await cookies()
   const token = cookieStore.get('token')?.value
-  const isAuthed = Boolean(token)
-  if (!isAuthed) redirect('/login?next=/admin')
+  if (!token) redirect('/login?next=/admin')
 
-  const auth = await requireAdmin({
-    headers: new Headers({ cookie: `token=${token}` }),
-  } as any)
-  if (auth instanceof Response) {
+  const decoded = await verifyTokenEdge(token)
+  if (!decoded || decoded.role !== 'admin') {
     // Non-admin (or token now invalid) → bounce to dashboard.
     redirect('/dashboard')
   }

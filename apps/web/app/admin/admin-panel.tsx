@@ -8,13 +8,16 @@
  *   (logout, theme, etc.) is the same. Splitting tabs into routes would
  *   duplicate the chrome.
  * - The selected tab persists in localStorage so reloading keeps state.
- * - Vendors get a detail drawer with activate/deactivate + email-verified
- *   actions. Clients are read-only in v1 (we can add deactivate later).
+ * - Vendors and clients each get a detail drawer with the relevant
+ *   admin actions.
+ * - Vendor tab supports batch selection + bulk actions (activate,
+ *   deactivate, mark email verified).
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { VendorDetailDrawer } from './vendor-detail-drawer'
+import { ClientDetailDrawer } from './client-detail-drawer'
 
 type Tab = 'vendors' | 'clients'
 
@@ -54,6 +57,8 @@ interface AdminClient {
 
 const PAGE_SIZE = 25
 
+type BatchAction = 'activate' | 'deactivate' | 'verify_email'
+
 export function AdminPanel() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('vendors')
@@ -66,6 +71,13 @@ export function AdminPanel() {
   const [activeFilter, setActiveFilter] = useState<'all' | 'true' | 'false'>('all')
   const [query, setQuery] = useState('')
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null)
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
+
+  // Vendor batch selection — set of selected vendor ids.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchPending, setBatchPending] = useState(false)
+  const [batchError, setBatchError] = useState<string | null>(null)
+  const [batchConfirm, setBatchConfirm] = useState<BatchAction | null>(null)
 
   // Hydrate tab from localStorage
   useEffect(() => {
@@ -116,6 +128,11 @@ export function AdminPanel() {
     else fetchClients()
   }, [tab, fetchVendors, fetchClients])
 
+  // Reset selection when the data changes (filters/tab/refetch).
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [tab, activeFilter, query])
+
   const onTabChange = (next: Tab) => {
     setTab(next)
     localStorage.setItem('admin-tab', next)
@@ -131,8 +148,74 @@ export function AdminPanel() {
       const data = await res.json().catch(() => ({}))
       throw new Error(data.error ?? `Error ${res.status}`)
     }
-    // Refresh list to reflect the new state
     await fetchVendors()
+  }
+
+  const onClientAction = async (id: string, body: { isActive?: boolean; emailVerified?: boolean }) => {
+    const res = await fetch(`/api/admin/clients/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error ?? `Error ${res.status}`)
+    }
+    await fetchClients()
+  }
+
+  // Selection helpers
+  const allOnPageSelected = useMemo(() => {
+    if (vendors.length === 0) return false
+    return vendors.every((v) => selectedIds.has(v.id))
+  }, [vendors, selectedIds])
+
+  const someOnPageSelected = useMemo(() => {
+    return vendors.some((v) => selectedIds.has(v.id))
+  }, [vendors, selectedIds])
+
+  const toggleAll = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allOnPageSelected) {
+        vendors.forEach((v) => next.delete(v.id))
+      } else {
+        vendors.forEach((v) => next.add(v.id))
+      }
+      return next
+    })
+  }
+
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const runBatch = async (action: BatchAction) => {
+    setBatchPending(true)
+    setBatchError(null)
+    try {
+      const res = await fetch('/api/admin/vendors/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds), action }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error ?? `Error ${res.status}`)
+      }
+      setSelectedIds(new Set())
+      setBatchConfirm(null)
+      await fetchVendors()
+    } catch (e: any) {
+      setBatchError(e.message ?? 'Error desconocido')
+    } finally {
+      setBatchPending(false)
+    }
   }
 
   const onLogout = async () => {
@@ -203,19 +286,56 @@ export function AdminPanel() {
           ) : tab === 'vendors' ? (
             <VendorTable
               vendors={vendors}
+              selectedIds={selectedIds}
+              onToggleOne={toggleOne}
+              onToggleAll={toggleAll}
+              allSelected={allOnPageSelected}
+              someSelected={someOnPageSelected}
               onSelect={(id) => setSelectedVendorId(id)}
             />
           ) : (
-            <ClientTable clients={clients} />
+            <ClientTable
+              clients={clients}
+              onSelect={(id) => setSelectedClientId(id)}
+            />
           )}
         </div>
       </div>
+
+      {/* Floating batch action bar — only when vendors tab has selection */}
+      {tab === 'vendors' && selectedIds.size > 0 && (
+        <BatchActionBar
+          count={selectedIds.size}
+          pending={batchPending}
+          error={batchError}
+          onAction={(a) => setBatchConfirm(a)}
+          onClear={() => setSelectedIds(new Set())}
+        />
+      )}
+
+      {batchConfirm && (
+        <BatchConfirmModal
+          action={batchConfirm}
+          count={selectedIds.size}
+          pending={batchPending}
+          onConfirm={() => runBatch(batchConfirm)}
+          onCancel={() => setBatchConfirm(null)}
+        />
+      )}
 
       {selectedVendorId && (
         <VendorDetailDrawer
           vendorId={selectedVendorId}
           onClose={() => setSelectedVendorId(null)}
           onAction={onVendorAction}
+        />
+      )}
+
+      {selectedClientId && (
+        <ClientDetailDrawer
+          clientId={selectedClientId}
+          onClose={() => setSelectedClientId(null)}
+          onAction={onClientAction}
         />
       )}
     </div>
@@ -247,9 +367,19 @@ function TabButton({
 
 function VendorTable({
   vendors,
+  selectedIds,
+  onToggleOne,
+  onToggleAll,
+  allSelected,
+  someSelected,
   onSelect,
 }: {
   vendors: AdminVendor[]
+  selectedIds: Set<string>
+  onToggleOne: (id: string) => void
+  onToggleAll: () => void
+  allSelected: boolean
+  someSelected: boolean
   onSelect: (id: string) => void
 }) {
   if (vendors.length === 0) {
@@ -260,6 +390,18 @@ function VendorTable({
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-slate-600 text-left">
           <tr>
+            <th className="px-3 py-3 w-10">
+              <input
+                type="checkbox"
+                aria-label="Seleccionar todos en esta página"
+                checked={allSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = !allSelected && someSelected
+                }}
+                onChange={onToggleAll}
+                className="w-4 h-4 cursor-pointer"
+              />
+            </th>
             <th className="px-4 py-3 font-medium">Vendedor</th>
             <th className="px-4 py-3 font-medium">Categoría</th>
             <th className="px-4 py-3 font-medium">Ciudad</th>
@@ -269,52 +411,72 @@ function VendorTable({
           </tr>
         </thead>
         <tbody>
-          {vendors.map((v) => (
-            <tr
-              key={v.id}
-              onClick={() => onSelect(v.id)}
-              className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
-            >
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-3">
-                  {v.photoUrl ? (
-                    <img
-                      src={v.photoUrl}
-                      alt=""
-                      className="w-8 h-8 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-slate-200" />
-                  )}
-                  <div>
-                    <div className="font-medium text-slate-900">{v.name}</div>
-                    <div className="text-xs text-slate-500">{v.owner.name}</div>
+          {vendors.map((v) => {
+            const isSelected = selectedIds.has(v.id)
+            return (
+              <tr
+                key={v.id}
+                onClick={() => onSelect(v.id)}
+                className={`border-t border-slate-100 cursor-pointer ${
+                  isSelected ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-slate-50'
+                }`}
+              >
+                <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Seleccionar ${v.name}`}
+                    checked={isSelected}
+                    onChange={() => onToggleOne(v.id)}
+                    className="w-4 h-4 cursor-pointer"
+                  />
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    {v.photoUrl ? (
+                      <img
+                        src={v.photoUrl}
+                        alt=""
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-slate-200" />
+                    )}
+                    <div>
+                      <div className="font-medium text-slate-900">{v.name}</div>
+                      <div className="text-xs text-slate-500">{v.owner.name}</div>
+                    </div>
                   </div>
-                </div>
-              </td>
-              <td className="px-4 py-3 text-slate-700">{v.category ?? '—'}</td>
-              <td className="px-4 py-3 text-slate-700">{v.cityId ?? '—'}</td>
-              <td className="px-4 py-3 text-slate-700">
-                {v.owner.email ?? '—'}
-                {!v.owner.emailVerified && (
-                  <span className="ml-1 text-xs text-amber-600">(sin verificar)</span>
-                )}
-              </td>
-              <td className="px-4 py-3">
-                <StatusBadge active={v.isActive} />
-              </td>
-              <td className="px-4 py-3 text-slate-500 text-xs">
-                {new Date(v.createdAt).toLocaleDateString('es-CO')}
-              </td>
-            </tr>
-          ))}
+                </td>
+                <td className="px-4 py-3 text-slate-700">{v.category ?? '—'}</td>
+                <td className="px-4 py-3 text-slate-700">{v.cityId ?? '—'}</td>
+                <td className="px-4 py-3 text-slate-700">
+                  {v.owner.email ?? '—'}
+                  {!v.owner.emailVerified && (
+                    <span className="ml-1 text-xs text-amber-600">(sin verificar)</span>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  <StatusBadge active={v.isActive} />
+                </td>
+                <td className="px-4 py-3 text-slate-500 text-xs">
+                  {new Date(v.createdAt).toLocaleDateString('es-CO')}
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
   )
 }
 
-function ClientTable({ clients }: { clients: AdminClient[] }) {
+function ClientTable({
+  clients,
+  onSelect,
+}: {
+  clients: AdminClient[]
+  onSelect: (id: string) => void
+}) {
   if (clients.length === 0) {
     return <div className="p-12 text-center text-slate-500">No se encontraron clientes.</div>
   }
@@ -333,7 +495,11 @@ function ClientTable({ clients }: { clients: AdminClient[] }) {
         </thead>
         <tbody>
           {clients.map((c) => (
-            <tr key={c.id} className="border-t border-slate-100">
+            <tr
+              key={c.id}
+              onClick={() => onSelect(c.id)}
+              className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
+            >
               <td className="px-4 py-3 font-medium text-slate-900">{c.name}</td>
               <td className="px-4 py-3 text-slate-700">
                 {c.email ?? '—'}
@@ -366,5 +532,137 @@ function StatusBadge({ active }: { active: boolean }) {
     >
       {active ? 'Activo' : 'Inactivo'}
     </span>
+  )
+}
+
+function BatchActionBar({
+  count,
+  pending,
+  error,
+  onAction,
+  onClear,
+}: {
+  count: number
+  pending: boolean
+  error: string | null
+  onAction: (a: BatchAction) => void
+  onClear: () => void
+}) {
+  return (
+    <div
+      role="region"
+      aria-label="Acciones por lote"
+      className="fixed bottom-4 inset-x-4 md:inset-x-auto md:right-6 md:max-w-2xl bg-slate-900 text-white rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 z-40"
+    >
+      <span className="text-sm font-medium">
+        {count} seleccionado{count === 1 ? '' : 's'}
+      </span>
+      <div className="flex-1" />
+      {error && (
+        <span className="text-xs text-red-300 mr-2 max-w-[14rem] truncate" title={error}>
+          {error}
+        </span>
+      )}
+      <button
+        onClick={onClear}
+        disabled={pending}
+        className="px-3 py-1.5 text-sm rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50"
+      >
+        Limpiar
+      </button>
+      <button
+        onClick={() => onAction('verify_email')}
+        disabled={pending}
+        className="px-3 py-1.5 text-sm rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50"
+      >
+        Verificar email
+      </button>
+      <button
+        onClick={() => onAction('activate')}
+        disabled={pending}
+        className="px-3 py-1.5 text-sm rounded bg-green-600 hover:bg-green-500 disabled:opacity-50"
+      >
+        Activar
+      </button>
+      <button
+        onClick={() => onAction('deactivate')}
+        disabled={pending}
+        className="px-3 py-1.5 text-sm rounded bg-red-600 hover:bg-red-500 disabled:opacity-50"
+      >
+        Desactivar
+      </button>
+    </div>
+  )
+}
+
+function BatchConfirmModal({
+  action,
+  count,
+  pending,
+  onConfirm,
+  onCancel,
+}: {
+  action: BatchAction
+  count: number
+  pending: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const labels: Record<BatchAction, { title: string; body: string; confirm: string; tone: string }> = {
+    activate: {
+      title: `Activar ${count} vendedor${count === 1 ? '' : 'es'}`,
+      body: 'Los vendedores seleccionados aparecerán en el mapa y serán visibles para los compradores.',
+      confirm: 'Activar',
+      tone: 'bg-green-600 hover:bg-green-500',
+    },
+    deactivate: {
+      title: `Desactivar ${count} vendedor${count === 1 ? '' : 'es'}`,
+      body: 'Los vendedores seleccionados dejarán de aparecer en el mapa. Sus datos no se eliminan.',
+      confirm: 'Desactivar',
+      tone: 'bg-red-600 hover:bg-red-500',
+    },
+    verify_email: {
+      title: `Marcar email verificado (${count})`,
+      body: 'Los propietarios seleccionados serán marcados con email verificado sin necesidad de hacer clic en el enlace.',
+      confirm: 'Verificar',
+      tone: 'bg-blue-600 hover:bg-blue-500',
+    },
+  }
+  const l = labels[action]
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+      onClick={onCancel}
+      role="presentation"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="batch-confirm-title"
+        className="bg-white rounded-xl shadow-xl max-w-md w-full p-6"
+      >
+        <h3 id="batch-confirm-title" className="text-lg font-semibold text-slate-900">
+          {l.title}
+        </h3>
+        <p className="mt-2 text-sm text-slate-600">{l.body}</p>
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            disabled={pending}
+            className="px-4 py-2 text-sm rounded border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={pending}
+            className={`px-4 py-2 text-sm rounded text-white font-medium disabled:opacity-50 ${l.tone}`}
+          >
+            {pending ? 'Aplicando…' : l.confirm}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }

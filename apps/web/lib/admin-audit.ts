@@ -16,9 +16,15 @@ export type AdminAction =
   | 'view_vendor_list'
   | 'view_vendor_detail'
   | 'view_client_list'
+  | 'view_client_detail'
   | 'activate_vendor'
   | 'deactivate_vendor'
+  | 'activate_client'
+  | 'deactivate_client'
   | 'override_email_verification'
+  | 'batch_activate_vendor'
+  | 'batch_deactivate_vendor'
+  | 'batch_verify_email'
 
 export async function logAdminAction(
   adminId: string,
