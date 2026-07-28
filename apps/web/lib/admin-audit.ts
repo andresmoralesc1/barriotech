@@ -31,6 +31,9 @@ export type AdminAction =
   | 'batch_verify_email'
   | 'soft_delete_vendor'
   | 'restore_soft_deleted_vendor'
+  | 'batch_activate_client'
+  | 'batch_deactivate_client'
+  | 'batch_verify_email_client'
 
 export async function logAdminAction(
   adminId: string,

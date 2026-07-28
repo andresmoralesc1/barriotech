@@ -94,6 +94,15 @@ export function AdminPanel() {
   const [batchError, setBatchError] = useState<string | null>(null)
   const [batchConfirm, setBatchConfirm] = useState<BatchAction | null>(null)
 
+  // Client batch selection — independent Set so toggling tabs doesn't
+  // leak vendor selection into the clients view (or vice versa). Reuse
+  // the same action type so the BatchActionBar / BatchConfirmModal are
+  // shared between tabs.
+  const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set())
+  const [clientBatchPending, setClientBatchPending] = useState(false)
+  const [clientBatchError, setClientBatchError] = useState<string | null>(null)
+  const [clientBatchConfirm, setClientBatchConfirm] = useState<BatchAction | null>(null)
+
   // Hydrate tab from localStorage
   useEffect(() => {
     const stored = localStorage.getItem('admin-tab')
@@ -332,6 +341,62 @@ export function AdminPanel() {
     }
   }
 
+  // Client-side mirror of the vendor selection helpers. Each tab keeps
+  // its own set so picking rows in Vendedores doesn't carry over to
+  // Clientes when the operator flips tabs.
+  const allClientsOnPageSelected = useMemo(() => {
+    if (clients.length === 0) return false
+    return clients.every((c) => selectedClientIds.has(c.id))
+  }, [clients, selectedClientIds])
+
+  const someClientsOnPageSelected = useMemo(() => {
+    return clients.some((c) => selectedClientIds.has(c.id))
+  }, [clients, selectedClientIds])
+
+  const toggleAllClients = () => {
+    setSelectedClientIds((prev) => {
+      const next = new Set(prev)
+      if (allClientsOnPageSelected) {
+        clients.forEach((c) => next.delete(c.id))
+      } else {
+        clients.forEach((c) => next.add(c.id))
+      }
+      return next
+    })
+  }
+
+  const toggleOneClient = (id: string) => {
+    setSelectedClientIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const runClientBatch = async (action: BatchAction) => {
+    setClientBatchPending(true)
+    setClientBatchError(null)
+    try {
+      const res = await fetch('/api/admin/clients/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientIds: Array.from(selectedClientIds), action }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error ?? `Error ${res.status}`)
+      }
+      setSelectedClientIds(new Set())
+      setClientBatchConfirm(null)
+      await fetchClients()
+    } catch (e: any) {
+      setClientBatchError(e.message ?? 'Error desconocido')
+    } finally {
+      setClientBatchPending(false)
+    }
+  }
+
   const onLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' })
     router.push('/login')
@@ -536,6 +601,11 @@ export function AdminPanel() {
             <>
               <ClientTable
                 clients={clients}
+                selectedIds={selectedClientIds}
+                onToggleOne={toggleOneClient}
+                onToggleAll={toggleAllClients}
+                allSelected={allClientsOnPageSelected}
+                someSelected={someClientsOnPageSelected}
                 onSelect={(id) => setSelectedClientId(id)}
               />
               <PaginationBar
@@ -567,6 +637,29 @@ export function AdminPanel() {
           pending={batchPending}
           onConfirm={() => runBatch(batchConfirm)}
           onCancel={() => setBatchConfirm(null)}
+        />
+      )}
+
+      {/* Client-batch counterparts — same shape, separate state so the
+          vendor selection isn't carried over when the operator flips tabs. */}
+      {tab === 'clients' && selectedClientIds.size > 0 && (
+        <BatchActionBar
+          count={selectedClientIds.size}
+          pending={clientBatchPending}
+          error={clientBatchError}
+          onAction={(a) => setClientBatchConfirm(a)}
+          onClear={() => setSelectedClientIds(new Set())}
+        />
+      )}
+
+      {clientBatchConfirm && (
+        <BatchConfirmModal
+          action={clientBatchConfirm}
+          count={selectedClientIds.size}
+          pending={clientBatchPending}
+          subject="client"
+          onConfirm={() => runClientBatch(clientBatchConfirm)}
+          onCancel={() => setClientBatchConfirm(null)}
         />
       )}
 
@@ -749,9 +842,19 @@ function VendorTable({
 
 function ClientTable({
   clients,
+  selectedIds,
+  onToggleOne,
+  onToggleAll,
+  allSelected,
+  someSelected,
   onSelect,
 }: {
   clients: AdminClient[]
+  selectedIds: Set<string>
+  onToggleOne: (id: string) => void
+  onToggleAll: () => void
+  allSelected: boolean
+  someSelected: boolean
   onSelect: (id: string) => void
 }) {
   if (clients.length === 0) {
@@ -762,6 +865,18 @@ function ClientTable({
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-slate-600 text-left">
           <tr>
+            <th className="px-3 py-3 w-10">
+              <input
+                type="checkbox"
+                aria-label="Seleccionar todos en esta página"
+                checked={allSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = !allSelected && someSelected
+                }}
+                onChange={onToggleAll}
+                className="w-4 h-4 cursor-pointer"
+              />
+            </th>
             <th className="px-4 py-3 font-medium">Nombre</th>
             <th className="px-4 py-3 font-medium">Email</th>
             <th className="px-4 py-3 font-medium">Teléfono</th>
@@ -771,29 +886,43 @@ function ClientTable({
           </tr>
         </thead>
         <tbody>
-          {clients.map((c) => (
-            <tr
-              key={c.id}
-              onClick={() => onSelect(c.id)}
-              className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
-            >
-              <td className="px-4 py-3 font-medium text-slate-900">{c.name}</td>
-              <td className="px-4 py-3 text-slate-700">
-                {c.email ?? '—'}
-                {!c.emailVerified && (
-                  <span className="ml-1 text-xs text-amber-600">(sin verificar)</span>
-                )}
-              </td>
-              <td className="px-4 py-3 text-slate-700">{c.phone ?? '—'}</td>
-              <td className="px-4 py-3 text-slate-700">{c.cityId ?? '—'}</td>
-              <td className="px-4 py-3">
-                <StatusBadge active={c.isActive} />
-              </td>
-              <td className="px-4 py-3 text-slate-500 text-xs">
-                {c.lastLoginAt ? new Date(c.lastLoginAt).toLocaleDateString('es-CO') : 'Nunca'}
-              </td>
-            </tr>
-          ))}
+          {clients.map((c) => {
+            const isSelected = selectedIds.has(c.id)
+            return (
+              <tr
+                key={c.id}
+                onClick={() => onSelect(c.id)}
+                className={`border-t border-slate-100 cursor-pointer ${
+                  isSelected ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-slate-50'
+                }`}
+              >
+                <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Seleccionar ${c.name}`}
+                    checked={isSelected}
+                    onChange={() => onToggleOne(c.id)}
+                    className="w-4 h-4 cursor-pointer"
+                  />
+                </td>
+                <td className="px-4 py-3 font-medium text-slate-900">{c.name}</td>
+                <td className="px-4 py-3 text-slate-700">
+                  {c.email ?? '—'}
+                  {!c.emailVerified && (
+                    <span className="ml-1 text-xs text-amber-600">(sin verificar)</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-slate-700">{c.phone ?? '—'}</td>
+                <td className="px-4 py-3 text-slate-700">{c.cityId ?? '—'}</td>
+                <td className="px-4 py-3">
+                  <StatusBadge active={c.isActive} />
+                </td>
+                <td className="px-4 py-3 text-slate-500 text-xs">
+                  {c.lastLoginAt ? new Date(c.lastLoginAt).toLocaleDateString('es-CO') : 'Nunca'}
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
@@ -1024,31 +1153,47 @@ function BatchConfirmModal({
   action,
   count,
   pending,
+  subject = 'vendor',
   onConfirm,
   onCancel,
 }: {
   action: BatchAction
   count: number
   pending: boolean
+  /** Tab the batch is being run from — controls copy. Defaults to 'vendor'
+   *  so the existing call site (which already passes an action and count)
+   *  keeps the same wording without rewrites. */
+  subject?: 'vendor' | 'client'
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const noun = subject === 'client' ? 'cliente' : 'vendedor'
+  const nounPlural = subject === 'client' ? 'clientes' : 'vendedores'
   const labels: Record<BatchAction, { title: string; body: string; confirm: string; tone: string }> = {
     activate: {
-      title: `Activar ${count} vendedor${count === 1 ? '' : 'es'}`,
-      body: 'Los vendedores seleccionados aparecerán en el mapa y serán visibles para los compradores.',
+      title: `Activar ${count} ${nounPlural}`,
+      body:
+        subject === 'client'
+          ? 'Los clientes seleccionados podrán volver a iniciar sesión y usar la plataforma.'
+          : 'Los vendedores seleccionados aparecerán en el mapa y serán visibles para los compradores.',
       confirm: 'Activar',
       tone: 'bg-green-600 hover:bg-green-500',
     },
     deactivate: {
-      title: `Desactivar ${count} vendedor${count === 1 ? '' : 'es'}`,
-      body: 'Los vendedores seleccionados dejarán de aparecer en el mapa. Sus datos no se eliminan.',
+      title: `Desactivar ${count} ${nounPlural}`,
+      body:
+        subject === 'client'
+          ? 'Los clientes seleccionados no podrán iniciar sesión. Sus datos no se eliminan.'
+          : 'Los vendedores seleccionados dejarán de aparecer en el mapa. Sus datos no se eliminan.',
       confirm: 'Desactivar',
       tone: 'bg-red-600 hover:bg-red-500',
     },
     verify_email: {
       title: `Marcar email verificado (${count})`,
-      body: 'Los propietarios seleccionados serán marcados con email verificado sin necesidad de hacer clic en el enlace.',
+      body:
+        subject === 'client'
+          ? 'Los clientes seleccionados serán marcados con email verificado sin necesidad de hacer clic en el enlace.'
+          : 'Los propietarios seleccionados serán marcados con email verificado sin necesidad de hacer clic en el enlace.',
       confirm: 'Verificar',
       tone: 'bg-blue-600 hover:bg-blue-500',
     },
