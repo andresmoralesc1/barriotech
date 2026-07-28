@@ -633,6 +633,25 @@ export function AdminPanel() {
                     className="w-32 px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     title="Total máximo (COP)"
                   />
+                  {/* Tier 13: master "Limpiar filtros" for the orders
+                      toolbar. With 6 filter inputs piled on this is
+                      the only way to reset to a clean view without
+                      manually clicking each ×. Mirrors the audit log's
+                      button. */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOrderQuery('')
+                      setOrderStatusFilter('all')
+                      setOrderSinceFilter('')
+                      setOrderUntilFilter('')
+                      setOrderMinTotal('')
+                      setOrderMaxTotal('')
+                    }}
+                    className="text-xs text-slate-600 hover:text-slate-900 underline self-end pb-2"
+                  >
+                    Limpiar filtros
+                  </button>
                 </>
               ) : (
                 <>
