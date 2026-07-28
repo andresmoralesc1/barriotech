@@ -34,6 +34,8 @@ export type AdminAction =
   | 'batch_activate_client'
   | 'batch_deactivate_client'
   | 'batch_verify_email_client'
+  | 'add_admin_note'
+  | 'delete_admin_note'
 
 export async function logAdminAction(
   adminId: string,

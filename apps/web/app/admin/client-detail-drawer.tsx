@@ -2,16 +2,24 @@
 
 /**
  * Client (buyer) detail drawer — right-side overlay with the buyer's
- * full profile, activity stats, and admin actions.
+ * full profile, activity stats, admin actions, and admin notes.
  *
  * Mirrors VendorDetailDrawer in structure but:
  *   - No vendor-level sections (this is a buyer, not a vendor)
  *   - Adds stats (orders, favorites, reviews) so an admin can spot
  *     fake or abandoned accounts at a glance
+ *   - Shows admin notes section (read-only history + new note form)
  *
  * Fetches fresh data when it opens so it's never stale. On action
  * success the parent refreshes the list and the drawer reflects the
  * new state locally.
+ *
+ * Notes are scoped to this department's API contract:
+ *   - GET /api/admin/notes?targetType=user&targetId=<id>
+ *   - POST /api/admin/notes  body { targetType, targetId, body }
+ *   - DELETE /api/admin/notes/[id]
+ * The list is updated optimistically on a successful POST so the
+ * admin sees their note appear without a roundtrip.
  */
 
 import { useEffect, useState } from 'react'
@@ -33,6 +41,17 @@ interface ClientDetail {
   }
 }
 
+interface AdminNote {
+  id: string
+  target_type: 'user' | 'vendor'
+  target_id: string
+  author_id: string
+  author_email: string | null
+  author_name: string
+  body: string
+  created_at: string
+}
+
 export function ClientDetailDrawer({
   clientId,
   onClose,
@@ -47,6 +66,13 @@ export function ClientDetailDrawer({
   const [error, setError] = useState<string | null>(null)
   const [actionPending, setActionPending] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+
+  const [notes, setNotes] = useState<AdminNote[]>([])
+  const [notesLoading, setNotesLoading] = useState(false)
+  const [noteDraft, setNoteDraft] = useState('')
+  const [notePending, setNotePending] = useState(false)
+  const [noteError, setNoteError] = useState<string | null>(null)
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -67,6 +93,28 @@ export function ClientDetailDrawer({
         setError(e.message)
         setLoading(false)
       })
+  }, [clientId])
+
+  // Notes fetched on mount and after every successful POST/DELETE.
+  const loadNotes = async () => {
+    setNotesLoading(true)
+    try {
+      const r = await fetch(`/api/admin/notes?targetType=user&targetId=${clientId}`)
+      if (r.ok) {
+        const data = await r.json()
+        setNotes(data.notes ?? [])
+      }
+    } catch {
+      // Silent — notes section is best-effort, the rest of the drawer
+      // still works. The note form will surface its own errors.
+    } finally {
+      setNotesLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadNotes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId])
 
   // Close on Escape
@@ -94,6 +142,66 @@ export function ClientDetailDrawer({
       setActionError(e.message ?? 'Error desconocido')
     } finally {
       setActionPending(false)
+    }
+  }
+
+  const submitNote = async () => {
+    const trimmed = noteDraft.trim()
+    if (trimmed.length === 0) {
+      setNoteError('La nota no puede estar vacía')
+      return
+    }
+    if (trimmed.length > 2000) {
+      setNoteError('La nota no puede superar 2000 caracteres')
+      return
+    }
+    setNotePending(true)
+    setNoteError(null)
+    try {
+      const r = await fetch('/api/admin/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetType: 'user',
+          targetId: clientId,
+          body: trimmed,
+        }),
+      })
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}))
+        throw new Error(data.error ?? `Error ${r.status}`)
+      }
+      const data = await r.json()
+      // Optimistic insert at the top (notes are ordered DESC).
+      setNotes((prev) => [
+        {
+          ...(data.note as Omit<AdminNote, 'author_email' | 'author_name'>),
+          author_email: null,
+          author_name: 'Tú',
+        },
+        ...prev,
+      ])
+      setNoteDraft('')
+    } catch (e: any) {
+      setNoteError(e.message ?? 'Error desconocido')
+    } finally {
+      setNotePending(false)
+    }
+  }
+
+  const deleteNote = async (noteId: string) => {
+    setDeletingNoteId(noteId)
+    try {
+      const r = await fetch(`/api/admin/notes/${noteId}`, { method: 'DELETE' })
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}))
+        throw new Error(data.error ?? `Error ${r.status}`)
+      }
+      setNotes((prev) => prev.filter((n) => n.id !== noteId))
+    } catch (e: any) {
+      setNoteError(e.message ?? 'Error al eliminar')
+    } finally {
+      setDeletingNoteId(null)
     }
   }
 
@@ -184,6 +292,81 @@ export function ClientDetailDrawer({
                 >
                   Marcar email como verificado
                 </button>
+              )}
+            </div>
+
+            <div className="border-t border-slate-200 pt-6 space-y-3">
+              <h4 className="font-semibold text-slate-900 text-sm">Notas internas</h4>
+              <p className="text-xs text-slate-500">
+                Anotaciones visibles para todos los administradores. No se muestran al cliente.
+              </p>
+
+              <textarea
+                value={noteDraft}
+                onChange={(e) => setNoteDraft(e.target.value)}
+                placeholder="Ej. Cliente escaló queja por cobro duplicado, llamar antes de reactivar."
+                rows={3}
+                maxLength={2000}
+                disabled={notePending}
+                className="w-full px-3 py-2 border border-slate-300 rounded text-sm resize-y focus:outline-none focus:border-blue-500 disabled:opacity-50"
+              />
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-slate-500">
+                  {noteDraft.length} / 2000
+                </span>
+                <button
+                  onClick={submitNote}
+                  disabled={notePending || noteDraft.trim().length === 0}
+                  className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded font-medium hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {notePending ? 'Guardando…' : 'Agregar nota'}
+                </button>
+              </div>
+              {noteError && (
+                <div className="text-red-700 text-xs">{noteError}</div>
+              )}
+
+              {notesLoading && notes.length === 0 && (
+                <div className="text-slate-500 text-sm">Cargando notas…</div>
+              )}
+              {!notesLoading && notes.length === 0 && (
+                <div className="text-slate-500 text-sm italic">Sin notas todavía.</div>
+              )}
+              {notes.length > 0 && (
+                <ul className="space-y-2">
+                  {notes.map((n) => (
+                    <li
+                      key={n.id}
+                      className="bg-slate-50 rounded p-3 text-sm border border-slate-200"
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="text-xs text-slate-500">
+                          <span className="font-medium text-slate-700">
+                            {n.author_name}
+                          </span>
+                          {n.author_email && (
+                            <span className="text-slate-400"> · {n.author_email}</span>
+                          )}
+                          <span className="text-slate-400">
+                            {' · '}
+                            {new Date(n.created_at).toLocaleString('es-CO')}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => deleteNote(n.id)}
+                          disabled={deletingNoteId === n.id}
+                          className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50"
+                          title="Eliminar nota"
+                        >
+                          {deletingNoteId === n.id ? '…' : 'Eliminar'}
+                        </button>
+                      </div>
+                      <p className="mt-1 text-slate-900 whitespace-pre-wrap break-words">
+                        {n.body}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           </div>
