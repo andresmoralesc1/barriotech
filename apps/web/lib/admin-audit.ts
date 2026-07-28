@@ -38,6 +38,7 @@ export type AdminAction =
   | 'delete_admin_note'
   | 'view_order_list'
   | 'view_order_detail'
+  | 'export_audit_csv'
 
 export async function logAdminAction(
   adminId: string,

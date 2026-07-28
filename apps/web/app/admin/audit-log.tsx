@@ -36,6 +36,7 @@ export function AuditLog() {
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Filters
@@ -49,11 +50,7 @@ export function AuditLog() {
       setLoading(true)
       setError(null)
       try {
-        const params = new URLSearchParams()
-        if (action.trim()) params.set('action', action.trim())
-        if (targetType !== 'all') params.set('targetType', targetType)
-        if (since) params.set('since', `${since}T00:00:00Z`)
-        if (until) params.set('until', `${until}T00:00:00Z`)
+        const params = buildParams(action, targetType, since, until)
         params.set('limit', String(PAGE_SIZE))
         params.set('offset', String(off))
 
@@ -76,6 +73,31 @@ export function AuditLog() {
     },
     [action, targetType, since, until]
   )
+
+  const exportCsv = useCallback(async () => {
+    setExporting(true)
+    setError(null)
+    try {
+      const params = buildParams(action, targetType, since, until)
+      const res = await fetch(`/api/admin/audit/export?${params}`, {
+        credentials: 'include',
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `auditoria-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error')
+    } finally {
+      setExporting(false)
+    }
+  }, [action, targetType, since, until])
 
   useEffect(() => {
     fetchPage(0)
@@ -139,6 +161,14 @@ export function AuditLog() {
           className="text-xs text-slate-600 hover:text-slate-900 underline self-end pb-2"
         >
           Limpiar filtros
+        </button>
+        <button
+          type="button"
+          onClick={exportCsv}
+          disabled={exporting || loading}
+          className="ml-auto px-4 py-2 bg-slate-900 text-white text-sm rounded hover:bg-slate-700 disabled:bg-slate-400 disabled:cursor-not-allowed self-end"
+        >
+          {exporting ? 'Exportando…' : 'Exportar CSV'}
         </button>
       </div>
 
@@ -272,4 +302,23 @@ function shortVal(v: unknown): string {
   if (typeof v === 'object') return '{…}'
   const s = String(v)
   return s.length > 20 ? s.slice(0, 18) + '…' : s
+}
+
+/**
+ * Build a URLSearchParams from the same filter set shared by the list
+ * endpoint and the export endpoint. Centralized so the two stay in
+ * sync — if a new filter gets added here, both pages pick it up.
+ */
+function buildParams(
+  action: string,
+  targetType: 'all' | 'user' | 'vendor',
+  since: string,
+  until: string
+): URLSearchParams {
+  const params = new URLSearchParams()
+  if (action.trim()) params.set('action', action.trim())
+  if (targetType !== 'all') params.set('targetType', targetType)
+  if (since) params.set('since', `${since}T00:00:00Z`)
+  if (until) params.set('until', `${until}T00:00:00Z`)
+  return params
 }
