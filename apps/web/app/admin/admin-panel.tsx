@@ -18,10 +18,11 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { VendorDetailDrawer } from './vendor-detail-drawer'
 import { ClientDetailDrawer } from './client-detail-drawer'
+import { OrderDetailDrawer } from './order-detail-drawer'
 import { DashboardOverview } from './dashboard-overview'
 import { AuditLog } from './audit-log'
 
-type Tab = 'overview' | 'vendors' | 'clients' | 'audit'
+type Tab = 'overview' | 'vendors' | 'clients' | 'orders' | 'audit'
 
 interface AdminVendor {
   id: string
@@ -58,6 +59,18 @@ interface AdminClient {
   lastLoginAt: string | null
 }
 
+interface AdminOrder {
+  id: string
+  status: 'pending' | 'accepted' | 'ready' | 'completed' | 'cancelled'
+  total: number
+  createdAt: string
+  buyer: { id: string; name: string; email: string | null }
+  vendor: { id: string; name: string; slug: string }
+  itemCount: number
+}
+
+const ORDER_STATUSES = ['pending', 'accepted', 'ready', 'completed', 'cancelled'] as const
+
 const PAGE_SIZE = 25
 
 type BatchAction = 'activate' | 'deactivate' | 'verify_email'
@@ -87,6 +100,16 @@ export function AdminPanel() {
   const [offset, setOffset] = useState(0)
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null)
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
+
+  // Tier 6: orders list state + filters. Status is a select dropdown;
+  // search hits buyer name/email + vendor name/slug. Date range +
+  // min/max total stay exposed via `since/until` (we keep them hidden
+  // for now to avoid toolbar bloat — re-useable if needed).
+  const [orders, setOrders] = useState<AdminOrder[]>([])
+  const [ordersTotal, setOrdersTotal] = useState(0)
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | typeof ORDER_STATUSES[number]>('all')
+  const [orderQuery, setOrderQuery] = useState('')
 
   // Vendor batch selection — set of selected vendor ids.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -110,6 +133,7 @@ export function AdminPanel() {
       stored === 'overview' ||
       stored === 'vendors' ||
       stored === 'clients' ||
+      stored === 'orders' ||
       stored === 'audit'
     ) {
       setTab(stored)
@@ -167,22 +191,45 @@ export function AdminPanel() {
     setLoading(false)
   }, [activeFilter, cityFilter, verifiedFilter, sinceFilter, untilFilter, query, offset])
 
+  const fetchOrders = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
+    if (orderStatusFilter !== 'all') params.set('status', orderStatusFilter)
+    if (orderQuery.trim()) params.set('q', orderQuery.trim())
+    const res = await fetch(`/api/admin/orders?${params}`)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setError(data.error ?? `Error ${res.status}`)
+      setLoading(false)
+      return
+    }
+    const data = await res.json()
+    setOrders(data.orders)
+    setOrdersTotal(data.total)
+    setLoading(false)
+  }, [orderStatusFilter, orderQuery, offset])
+
   useEffect(() => {
     // Tab-driven fetches:
     //   · vendors  → vendor list (offset/filter already in fetchVendors deps)
     //   · clients  → client list
-    //   · overview → BOTH in parallel, so the tab badges show real counts
-    //                even if the user never clicks the table tabs
+    //   · orders   → order list
+    //   · overview → BOTH vendors + clients in parallel, so the tab badges
+    //                show real counts even if the user never clicks the
+    //                table tabs
     //   · audit    → component fetches its own data internally, skip here
     if (tab === 'vendors') {
       void fetchVendors()
     } else if (tab === 'clients') {
       void fetchClients()
+    } else if (tab === 'orders') {
+      void fetchOrders()
     } else if (tab === 'overview') {
       void fetchVendors()
       void fetchClients()
     }
-  }, [tab, fetchVendors, fetchClients])
+  }, [tab, fetchVendors, fetchClients, fetchOrders])
 
   // Reset selection AND page when the filter context changes. Resetting
   // selection alone would leave a stale set whose ids might no longer be
@@ -190,6 +237,8 @@ export function AdminPanel() {
   // appearing empty after the user narrows the search.
   useEffect(() => {
     setSelectedIds(new Set())
+    setSelectedClientIds(new Set())
+    setSelectedOrderId(null)
     setOffset(0)
   }, [
     tab,
@@ -201,6 +250,8 @@ export function AdminPanel() {
     sinceFilter,
     untilFilter,
     showTrash,
+    orderStatusFilter,
+    orderQuery,
   ])
 
   const onTabChange = (next: Tab) => {
@@ -437,26 +488,56 @@ export function AdminPanel() {
                 Clientes
                 <span className="ml-2 text-xs text-slate-500">({clientsTotal})</span>
               </TabButton>
+              <TabButton active={tab === 'orders'} onClick={() => onTabChange('orders')}>
+                Pedidos
+                <span className="ml-2 text-xs text-slate-500">({ordersTotal})</span>
+              </TabButton>
               <TabButton active={tab === 'audit'} onClick={() => onTabChange('audit')}>
                 Auditoría
               </TabButton>
             </nav>
           </div>
 
-          {/* Toolbar — only shown on the table-driven tabs (vendors/clients) */}
-          {(tab === 'vendors' || tab === 'clients') && (
+          {/* Toolbar — only shown on the table-driven tabs (vendors/clients/orders) */}
+          {(tab === 'vendors' || tab === 'clients' || tab === 'orders') && (
             <div className="p-4 border-b border-slate-200 flex gap-3 items-center flex-wrap">
-              <input
-                type="search"
-                placeholder={
-                  tab === 'vendors' ? 'Buscar por nombre…' : 'Buscar por nombre o email…'
-                }
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="flex-1 min-w-[180px] px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <select
-                value={activeFilter}
+              {tab === 'orders' ? (
+                <>
+                  <input
+                    type="search"
+                    placeholder="Buscar por comprador o vendedor…"
+                    value={orderQuery}
+                    onChange={(e) => setOrderQuery(e.target.value)}
+                    className="flex-1 min-w-[180px] px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <select
+                    value={orderStatusFilter}
+                    onChange={(e) =>
+                      setOrderStatusFilter(e.target.value as typeof orderStatusFilter)
+                    }
+                    className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">Todos los estados</option>
+                    <option value="pending">Pendiente</option>
+                    <option value="accepted">Aceptado</option>
+                    <option value="ready">Listo</option>
+                    <option value="completed">Completado</option>
+                    <option value="cancelled">Cancelado</option>
+                  </select>
+                </>
+              ) : (
+                <>
+                  <input
+                    type="search"
+                    placeholder={
+                      tab === 'vendors' ? 'Buscar por nombre…' : 'Buscar por nombre o email…'
+                    }
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    className="flex-1 min-w-[180px] px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <select
+                    value={activeFilter}
                 onChange={(e) => setActiveFilter(e.target.value as 'all' | 'true' | 'false')}
                 className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 title="Estado activo/inactivo"
@@ -557,7 +638,8 @@ export function AdminPanel() {
                 </label>
               )}
               {/* Export button hits the export endpoint with the same
-                  filters currently applied to the table. */}
+                  filters currently applied to the table. Orders tab
+                  has no export in tier 6 (read-only oversight). */}
               <button
                 type="button"
                 onClick={onExportCsv}
@@ -566,6 +648,8 @@ export function AdminPanel() {
               >
                 <span aria-hidden="true">⬇</span> Exportar CSV
               </button>
+                </>
+              )}
             </div>
           )}
 
@@ -597,7 +681,7 @@ export function AdminPanel() {
                 onChange={setOffset}
               />
             </>
-          ) : (
+          ) : tab === 'clients' ? (
             <>
               <ClientTable
                 clients={clients}
@@ -610,6 +694,19 @@ export function AdminPanel() {
               />
               <PaginationBar
                 total={clientsTotal}
+                offset={offset}
+                pageSize={PAGE_SIZE}
+                onChange={setOffset}
+              />
+            </>
+          ) : (
+            <>
+              <OrderTable
+                orders={orders}
+                onSelect={(id) => setSelectedOrderId(id)}
+              />
+              <PaginationBar
+                total={ordersTotal}
                 offset={offset}
                 pageSize={PAGE_SIZE}
                 onChange={setOffset}
@@ -687,6 +784,13 @@ export function AdminPanel() {
           clientId={selectedClientId}
           onClose={() => setSelectedClientId(null)}
           onAction={onClientAction}
+        />
+      )}
+
+      {selectedOrderId && (
+        <OrderDetailDrawer
+          orderId={selectedOrderId}
+          onClose={() => setSelectedOrderId(null)}
         />
       )}
     </div>
@@ -948,7 +1052,112 @@ function StatusBadge({ active }: { active: boolean }) {
  * table is small and bespoke enough that the dependency cost outweighs
  * the benefit, and (b) we want exact control over the visible page list
  * (ellipsis for long ranges).
+ */
+/**
+ * OrderTable — read-only listing of orders for tier 6 oversight.
  *
+ * Each row is clickable; selection opens the OrderDetailDrawer. No
+ * checkbox column because tier 6 has no batch actions on orders
+ * (status mutations stay in the buyer/vendor flows).
+ *
+ * Status badge colors mirror the drawer so the table and detail
+ * pane read consistently.
+ */
+function OrderTable({
+  orders,
+  onSelect,
+}: {
+  orders: AdminOrder[]
+  onSelect: (id: string) => void
+}) {
+  if (orders.length === 0) {
+    return (
+      <div className="p-12 text-center text-slate-500">
+        No hay pedidos con los filtros actuales.
+      </div>
+    )
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+          <tr>
+            <th className="px-3 py-2">Fecha</th>
+            <th className="px-3 py-2">Comprador</th>
+            <th className="px-3 py-2">Vendedor</th>
+            <th className="px-3 py-2 text-right">Items</th>
+            <th className="px-3 py-2 text-right">Total</th>
+            <th className="px-3 py-2">Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {orders.map((o) => (
+            <tr
+              key={o.id}
+              onClick={() => onSelect(o.id)}
+              className="border-t border-slate-200 cursor-pointer hover:bg-slate-50"
+            >
+              <td className="px-3 py-2 text-slate-600">
+                {new Date(o.createdAt).toLocaleString('es-CO', {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </td>
+              <td className="px-3 py-2">
+                <div className="font-medium text-slate-900">{o.buyer.name}</div>
+                <div className="text-xs text-slate-500">{o.buyer.email ?? '—'}</div>
+              </td>
+              <td className="px-3 py-2">
+                <div className="font-medium text-slate-900">{o.vendor.name}</div>
+                <div className="text-xs text-slate-500">{o.vendor.slug}</div>
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums">{o.itemCount}</td>
+              <td className="px-3 py-2 text-right tabular-nums font-medium">
+                {new Intl.NumberFormat('es-CO', {
+                  style: 'currency',
+                  currency: 'COP',
+                  maximumFractionDigits: 0,
+                }).format(o.total)}
+              </td>
+              <td className="px-3 py-2">
+                <OrderStatusBadge status={o.status} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function OrderStatusBadge({ status }: { status: AdminOrder['status'] }) {
+  const label: Record<AdminOrder['status'], string> = {
+    pending: 'Pendiente',
+    accepted: 'Aceptado',
+    ready: 'Listo',
+    completed: 'Completado',
+    cancelled: 'Cancelado',
+  }
+  const color: Record<AdminOrder['status'], string> = {
+    pending: 'bg-yellow-100 text-yellow-800',
+    accepted: 'bg-blue-100 text-blue-800',
+    ready: 'bg-purple-100 text-purple-800',
+    completed: 'bg-green-100 text-green-800',
+    cancelled: 'bg-red-100 text-red-800',
+  }
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${color[status]}`}
+    >
+      {label[status]}
+    </span>
+  )
+}
+
+/**
  * Page number strategy: always show first, last, current, current ±1,
  * and ellipses for the gap. With PAGE_SIZE=25 and a typical admin table
  * this stays under 7 buttons even at 1000+ rows.
