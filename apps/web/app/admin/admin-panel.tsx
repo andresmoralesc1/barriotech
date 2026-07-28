@@ -110,6 +110,12 @@ export function AdminPanel() {
   const [ordersTotal, setOrdersTotal] = useState(0)
   const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | typeof ORDER_STATUSES[number]>('all')
   const [orderQuery, setOrderQuery] = useState('')
+  // Tier 11: orders date range filter. Backend supports since/until on
+  // /api/admin/orders since tier 6; the UI only had status + free-text
+  // query. Separate state from the vendor/client `sinceFilter` so
+  // changing tabs doesn't lose the order window.
+  const [orderSinceFilter, setOrderSinceFilter] = useState('') // YYYY-MM-DD
+  const [orderUntilFilter, setOrderUntilFilter] = useState('')
 
   // Tier 8: dashboard recent-activity deep-links to the audit log with
   // the action of the clicked row pre-filled in the filter.
@@ -206,6 +212,8 @@ export function AdminPanel() {
     const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
     if (orderStatusFilter !== 'all') params.set('status', orderStatusFilter)
     if (orderQuery.trim()) params.set('q', orderQuery.trim())
+    if (orderSinceFilter) params.set('since', orderSinceFilter)
+    if (orderUntilFilter) params.set('until', orderUntilFilter)
     const res = await fetch(`/api/admin/orders?${params}`)
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
@@ -217,7 +225,7 @@ export function AdminPanel() {
     setOrders(data.orders)
     setOrdersTotal(data.total)
     setLoading(false)
-  }, [orderStatusFilter, orderQuery, offset])
+  }, [orderStatusFilter, orderQuery, orderSinceFilter, orderUntilFilter, offset])
 
   useEffect(() => {
     // Tab-driven fetches:
@@ -560,6 +568,27 @@ export function AdminPanel() {
                     <option value="completed">Completado</option>
                     <option value="cancelled">Cancelado</option>
                   </select>
+                  {/* Tier 11: date range filter. The input type=date
+                      gives a native picker and serializes to YYYY-MM-DD
+                      which matches what the backend expects. The
+                      controls are valueless until typed so the placeholder
+                      doubles as the empty-state hint. */}
+                  <input
+                    type="date"
+                    aria-label="Pedidos desde"
+                    value={orderSinceFilter}
+                    onChange={(e) => setOrderSinceFilter(e.target.value)}
+                    className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    title="Desde (incl.)"
+                  />
+                  <input
+                    type="date"
+                    aria-label="Pedidos hasta"
+                    value={orderUntilFilter}
+                    onChange={(e) => setOrderUntilFilter(e.target.value)}
+                    className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    title="Hasta (excl.)"
+                  />
                 </>
               ) : (
                 <>
