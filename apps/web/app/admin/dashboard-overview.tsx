@@ -49,12 +49,17 @@ interface DashboardSummary {
 export function DashboardOverview({
   onNavigate,
   onJumpToAudit,
+  onJumpToAuditByAdmin,
 }: {
   /** Lets the dashboard cards deep-link to the right tab+filter. */
   onNavigate: (tab: 'vendors' | 'clients', filter: 'all' | 'true' | 'false') => void
   /** Tier 8: click on a recent-activity row → audit log filtered by
    *  that row's action. */
   onJumpToAudit: (action: string) => void
+  /** Tier 10: click on the admin email in a recent-activity row →
+   *  audit log filtered by that admin's uuid. The admin email is a
+   *  nested click target inside the row, so it must stopPropagation. */
+  onJumpToAuditByAdmin: (adminId: string) => void
 }) {
   const [data, setData] = useState<DashboardSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -207,7 +212,22 @@ export function DashboardOverview({
                       </span>
                     </div>
                     <div className="text-slate-500 mt-0.5 truncate">
-                      por {a.adminEmail ?? a.adminId.slice(0, 8)}
+                      por{' '}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          // Nested click target — the row's outer onClick
+                          // is the action deep-link. Without stopping
+                          // propagation both fires and the operator lands
+                          // on the wrong filter.
+                          e.stopPropagation()
+                          onJumpToAuditByAdmin(a.adminId)
+                        }}
+                        className="font-medium text-slate-700 hover:text-blue-700 hover:underline focus:outline-none focus:underline"
+                        title={`Ver todas las acciones de ${a.adminEmail ?? a.adminId.slice(0, 8)} en la bitácora`}
+                      >
+                        {a.adminEmail ?? a.adminId.slice(0, 8)}
+                      </button>
                       {a.targetType && a.targetId && (
                         <> · {a.targetType}:{a.targetId.slice(0, 8)}…</>
                       )}

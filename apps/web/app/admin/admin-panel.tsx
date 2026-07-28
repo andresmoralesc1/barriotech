@@ -114,6 +114,11 @@ export function AdminPanel() {
   // Tier 8: dashboard recent-activity deep-links to the audit log with
   // the action of the clicked row pre-filled in the filter.
   const [auditInitialAction, setAuditInitialAction] = useState('')
+  // Tier 10: same idea but for the admin who performed the action —
+  // "what did this admin do?" workflow. The action filter is reset so
+  // the operator sees ALL actions by that admin, not just the one on
+  // the row they clicked.
+  const [auditInitialAdminId, setAuditInitialAdminId] = useState('')
 
   // Vendor batch selection — set of selected vendor ids.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -283,6 +288,23 @@ export function AdminPanel() {
     setTab('audit')
     localStorage.setItem('admin-tab', 'audit')
     setAuditInitialAction(actionName)
+    // Tier 10: switching to an admin-scoped jump clears the action
+    // filter so the operator sees EVERY action by that admin, not just
+    // the one on the clicked row. The action filter is recoverable by
+    // clearing the admin chip.
+    setAuditInitialAdminId('')
+    setOffset(0)
+  }, [])
+
+  /** Tier 10: dashboard recent-activity admin email click → audit-log
+   *  filtered by admin uuid. The whole recent-activity row is owned
+   *  by the action-jump; the admin email is a nested click target so
+   *  callers must stopPropagation (the dashboard already does). */
+  const onJumpToAuditByAdmin = useCallback((adminId: string) => {
+    setTab('audit')
+    localStorage.setItem('admin-tab', 'audit')
+    setAuditInitialAdminId(adminId)
+    setAuditInitialAction('')
     setOffset(0)
   }, [])
 
@@ -672,9 +694,17 @@ export function AdminPanel() {
           )}
 
           {tab === 'overview' ? (
-            <DashboardOverview onNavigate={onNavigate} onJumpToAudit={onJumpToAudit} />
+            <DashboardOverview
+              onNavigate={onNavigate}
+              onJumpToAudit={onJumpToAudit}
+              onJumpToAuditByAdmin={onJumpToAuditByAdmin}
+            />
           ) : tab === 'audit' ? (
-            <AuditLog key={auditInitialAction} initialAction={auditInitialAction} />
+            <AuditLog
+              key={`${auditInitialAction}|${auditInitialAdminId}`}
+              initialAction={auditInitialAction}
+              initialAdminId={auditInitialAdminId}
+            />
           ) : loading ? (
             <div className="p-12 text-center text-slate-500">Cargando…</div>
           ) : tab === 'vendors' ? (

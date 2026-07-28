@@ -31,7 +31,15 @@ interface AuditEntry {
 
 const PAGE_SIZE = 50
 
-export function AuditLog({ initialAction = '' }: { initialAction?: string } = {}) {
+export function AuditLog({
+  initialAction = '',
+  initialAdminId = '',
+}: {
+  initialAction?: string
+  /** Tier 10: deep-link from dashboard recent-activity row → audit log
+   *  filtered by admin uuid. */
+  initialAdminId?: string
+} = {}) {
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
@@ -44,6 +52,9 @@ export function AuditLog({ initialAction = '' }: { initialAction?: string } = {}
   const [targetType, setTargetType] = useState<'all' | 'user' | 'vendor'>('all')
   const [since, setSince] = useState('') // YYYY-MM-DD
   const [until, setUntil] = useState('')
+  // Tier 10: adminId filter — populated by deep-link from dashboard.
+  // Stored as raw uuid; cleared by clicking the "× Admin: …" chip.
+  const [adminId, setAdminId] = useState(initialAdminId)
 
   const fetchPage = useCallback(
     async (off: number) => {
@@ -51,6 +62,7 @@ export function AuditLog({ initialAction = '' }: { initialAction?: string } = {}
       setError(null)
       try {
         const params = buildParams(action, targetType, since, until)
+        if (adminId) params.set('adminId', adminId)
         params.set('limit', String(PAGE_SIZE))
         params.set('offset', String(off))
 
@@ -71,7 +83,7 @@ export function AuditLog({ initialAction = '' }: { initialAction?: string } = {}
         setLoading(false)
       }
     },
-    [action, targetType, since, until]
+    [action, targetType, since, until, adminId]
   )
 
   const exportCsv = useCallback(async () => {
@@ -79,6 +91,7 @@ export function AuditLog({ initialAction = '' }: { initialAction?: string } = {}
     setError(null)
     try {
       const params = buildParams(action, targetType, since, until)
+      if (adminId) params.set('adminId', adminId)
       const res = await fetch(`/api/admin/audit/export?${params}`, {
         credentials: 'include',
       })
@@ -97,7 +110,7 @@ export function AuditLog({ initialAction = '' }: { initialAction?: string } = {}
     } finally {
       setExporting(false)
     }
-  }, [action, targetType, since, until])
+  }, [action, targetType, since, until, adminId])
 
   useEffect(() => {
     fetchPage(0)
@@ -162,6 +175,24 @@ export function AuditLog({ initialAction = '' }: { initialAction?: string } = {}
         >
           Limpiar filtros
         </button>
+        {adminId && (
+          <div className="flex items-center gap-2 self-end pb-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+            <span className="font-medium">Admin:</span>
+            <span className="font-mono">
+              {/* Prefer the resolved email from any fetched row over the
+                  raw uuid — same affordance as the dashboard row. */}
+              {entries.find((e) => e.adminEmail)?.adminEmail ?? `${adminId.slice(0, 8)}…`}
+            </span>
+            <button
+              type="button"
+              onClick={() => setAdminId('')}
+              aria-label="Quitar filtro por admin"
+              className="ml-1 text-blue-600 hover:text-blue-900 font-bold leading-none"
+            >
+              ×
+            </button>
+          </div>
+        )}
         <button
           type="button"
           onClick={exportCsv}
