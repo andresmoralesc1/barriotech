@@ -5,6 +5,9 @@
  * Filters (all optional, AND'd):
  *   ?cityId=bogota           — match users.city_id
  *   ?active=true|false       — match users.is_active
+ *   ?verified=true|false     — match users.email_verified
+ *   ?since=YYYY-MM-DD        — users.created_at >= since
+ *   ?until=YYYY-MM-DD        — users.created_at <  until (exclusive upper bound)
  *   ?q=texto                  — case-insensitive search over users.name OR users.email
  *   ?limit=50&offset=0        — pagination (default 50, max 200)
  *
@@ -41,6 +44,9 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const cityId = url.searchParams.get('cityId')
   const active = url.searchParams.get('active')
+  const verified = url.searchParams.get('verified')
+  const since = url.searchParams.get('since')
+  const until = url.searchParams.get('until')
   const q = url.searchParams.get('q')?.trim()
   const limitRaw = parseInt(url.searchParams.get('limit') ?? '', 10)
   const offsetRaw = parseInt(url.searchParams.get('offset') ?? '', 10)
@@ -59,6 +65,16 @@ export async function GET(req: NextRequest) {
   }
   if (active === 'true') conditions.push('u.is_active = true')
   else if (active === 'false') conditions.push('u.is_active = false')
+  if (verified === 'true') conditions.push('u.email_verified = true')
+  else if (verified === 'false') conditions.push('u.email_verified = false')
+  if (since) {
+    params.push(since)
+    conditions.push(`u.created_at >= $${params.length}`)
+  }
+  if (until) {
+    params.push(until)
+    conditions.push(`u.created_at < $${params.length}`)
+  }
   if (q) {
     params.push(`%${q}%`)
     const idx = params.length
@@ -96,7 +112,7 @@ export async function GET(req: NextRequest) {
     const total = result.rows.length > 0 ? parseInt(result.rows[0].total_count, 10) : 0
 
     logAdminAction(auth.userId, 'view_client_list', req, {
-      metadata: { filters: { cityId, active, q }, limit, offset, returned: clients.length },
+      metadata: { filters: { cityId, active, verified, since, until, q }, limit, offset, returned: clients.length },
     })
 
     return NextResponse.json({ clients, total, limit, offset })

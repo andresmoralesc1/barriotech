@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, { params: paramsPromise }: { params:
     const vendorRes = await pool.query(
       `SELECT id, name, slug, category, description, phone, city_id, photo_url
        FROM vendors
-       WHERE id = $1 AND is_active = TRUE`,
+       WHERE id = $1 AND is_active = TRUE AND deleted_at IS NULL`,
       [vendorId]
     )
     if (vendorRes.rows.length === 0) {

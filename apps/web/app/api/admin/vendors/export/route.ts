@@ -10,6 +10,10 @@
  * attachment; filename="...". The Content-Disposition uses a date
  * stamp so repeated exports don't overwrite each other in /tmp.
  *
+ * Soft-deleted vendors are hidden by default; pass
+ * ?includeDeleted=true to include them (useful for auditing trash
+ * before a permanent purge).
+ *
  * Admin-only. Audits with `export_vendors_csv`.
  */
 
@@ -45,18 +49,33 @@ export async function GET(req: NextRequest) {
   const active = url.searchParams.get('active')
   const q = url.searchParams.get('q')?.trim()
   const verified = url.searchParams.get('verified')
+  const withPhoto = url.searchParams.get('withPhoto')
+  const since = url.searchParams.get('since')
+  const until = url.searchParams.get('until')
+  const includeDeleted = url.searchParams.get('includeDeleted') === 'true'
 
   const conditions: string[] = []
   const params: unknown[] = []
 
+  if (!includeDeleted) conditions.push('v.deleted_at IS NULL')
   if (cityId) {
     params.push(cityId)
     conditions.push(`v.city_id = $${params.length}`)
   }
   if (active === 'true') conditions.push('v.is_active = true')
   else if (active === 'false') conditions.push('v.is_active = false')
-  if (verified === 'true') conditions.push('v.is_verified = true')
-  else if (verified === 'false') conditions.push('v.is_verified = false')
+  if (verified === 'true') conditions.push('u.email_verified = true')
+  else if (verified === 'false') conditions.push('u.email_verified = false')
+  if (withPhoto === 'true') conditions.push('v.photo_url IS NOT NULL')
+  else if (withPhoto === 'false') conditions.push('v.photo_url IS NULL')
+  if (since) {
+    params.push(since)
+    conditions.push(`v.created_at >= $${params.length}`)
+  }
+  if (until) {
+    params.push(until)
+    conditions.push(`v.created_at < $${params.length}`)
+  }
   if (q) {
     params.push(`%${q}%`)
     conditions.push(`v.name ILIKE $${params.length}`)
@@ -68,7 +87,7 @@ export async function GET(req: NextRequest) {
     const result = await pool.query(
       `SELECT
          v.id, v.name, v.slug, v.category, v.description, v.phone,
-         v.city_id, v.is_active, v.is_verified, v.created_at,
+         v.city_id, v.is_active, v.is_verified, v.created_at, v.deleted_at,
          v.photo_url, v.latitude, v.longitude, v.rating, v.review_count,
          c.name AS city_name, c.department,
          u.email AS owner_email, u.phone AS owner_phone,
@@ -90,7 +109,7 @@ export async function GET(req: NextRequest) {
       'latitude', 'longitude',
       'is_active', 'is_verified', 'rating', 'review_count',
       'owner_email', 'owner_phone', 'owner_email_verified',
-      'owner_last_login_at', 'created_at',
+      'owner_last_login_at', 'created_at', 'deleted_at',
     ]
 
     const rows = result.rows.map((r) => ({
@@ -114,20 +133,24 @@ export async function GET(req: NextRequest) {
       owner_email_verified: r.owner_email_verified ? 'true' : 'false',
       owner_last_login_at: r.owner_last_login_at,
       created_at: r.created_at,
+      deleted_at: r.deleted_at,
     }))
 
     const csv = toCsv(headers, rows)
 
     logAdminAction(auth.userId, 'export_vendors_csv', req, {
-      metadata: { filters: { cityId, active, verified, q }, rows: rows.length },
+      metadata: {
+        filters: { cityId, active, verified, q, withPhoto, since, until, includeDeleted },
+        rows: rows.length,
+      },
     })
 
     const datestamp = new Date().toISOString().slice(0, 10)
-    const filename = `vendedores-${datestamp}.csv`
+    const filename = includeDeleted ? `vendedores-papelera-${datestamp}.csv` : `vendedores-${datestamp}.csv`
 
     // BOM at the start makes Excel auto-detect UTF-8 instead of CP1252,
     // which keeps accented city names ("Bogotá") from going mojibake.
-    return new NextResponse('﻿' + csv, {
+    return new NextResponse('\ufeff' + csv, {
       status: 200,
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',

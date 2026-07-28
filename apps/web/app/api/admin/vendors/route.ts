@@ -5,6 +5,11 @@
  *   ?cityId=bogota           — match vendor.city_id
  *   ?active=true|false       — match vendor.is_active
  *   ?q=texto                  — case-insensitive search over vendor.name
+ *   ?since=YYYY-MM-DD         — registered on or after this date
+ *   ?until=YYYY-MM-DD         — registered before this date (exclusive)
+ *   ?verified=true|false      — owner email_verified
+ *   ?withPhoto=true|false     — vendor.photo_url NOT NULL
+ *   ?includeDeleted=true      — show soft-deleted (default: hide them)
  *   ?limit=50&offset=0        — pagination (default 50, max 200)
  *
  * Admin-only. Every call is written to admin_audit_log so we can
@@ -42,6 +47,11 @@ export async function GET(req: NextRequest) {
   const cityId = url.searchParams.get('cityId')
   const active = url.searchParams.get('active')
   const q = url.searchParams.get('q')?.trim()
+  const verified = url.searchParams.get('verified')
+  const withPhoto = url.searchParams.get('withPhoto')
+  const since = url.searchParams.get('since')
+  const until = url.searchParams.get('until')
+  const includeDeleted = url.searchParams.get('includeDeleted') === 'true'
   const limitRaw = parseInt(url.searchParams.get('limit') ?? '', 10)
   const offsetRaw = parseInt(url.searchParams.get('offset') ?? '', 10)
 
@@ -53,12 +63,27 @@ export async function GET(req: NextRequest) {
   const conditions: string[] = []
   const params: unknown[] = []
 
+  if (!includeDeleted) {
+    conditions.push('v.deleted_at IS NULL')
+  }
   if (cityId) {
     params.push(cityId)
     conditions.push(`v.city_id = $${params.length}`)
   }
   if (active === 'true') conditions.push('v.is_active = true')
   else if (active === 'false') conditions.push('v.is_active = false')
+  if (verified === 'true') conditions.push('u.email_verified = true')
+  else if (verified === 'false') conditions.push('u.email_verified = false')
+  if (withPhoto === 'true') conditions.push('v.photo_url IS NOT NULL')
+  else if (withPhoto === 'false') conditions.push('v.photo_url IS NULL')
+  if (since) {
+    params.push(since)
+    conditions.push(`v.created_at >= $${params.length}`)
+  }
+  if (until) {
+    params.push(until)
+    conditions.push(`v.created_at < $${params.length}`)
+  }
   if (q) {
     params.push(`%${q}%`)
     conditions.push(`v.name ILIKE $${params.length}`)
@@ -75,6 +100,7 @@ export async function GET(req: NextRequest) {
          v.id, v.name, v.slug, v.category, v.description, v.phone,
          v.city_id, v.latitude, v.longitude,
          v.is_active, v.is_verified, v.created_at, v.photo_url,
+         v.deleted_at,
          p.name AS owner_name,
          u.email AS owner_email, u.phone AS owner_phone,
          u.email_verified AS owner_email_verified,
@@ -102,6 +128,7 @@ export async function GET(req: NextRequest) {
       isVerified: r.is_verified,
       photoUrl: r.photo_url,
       createdAt: r.created_at,
+      deletedAt: r.deleted_at,
       owner: {
         name: r.owner_name,
         email: r.owner_email,
@@ -114,7 +141,12 @@ export async function GET(req: NextRequest) {
 
     // Fire-and-forget audit
     logAdminAction(auth.userId, 'view_vendor_list', req, {
-      metadata: { filters: { cityId, active, q }, limit, offset, returned: vendors.length },
+      metadata: {
+        filters: { cityId, active, q, verified, withPhoto, since, until, includeDeleted },
+        limit,
+        offset,
+        returned: vendors.length,
+      },
     })
 
     return NextResponse.json({ vendors, total, limit, offset })

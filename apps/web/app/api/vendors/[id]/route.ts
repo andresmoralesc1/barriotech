@@ -29,7 +29,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const accept = req.headers.get('accept') || ''
     if (isUuidParam && accept.includes('text/html')) {
       const slugResult = await pool.query(
-        'SELECT slug FROM vendors WHERE id = $1',
+        'SELECT slug FROM vendors WHERE id = $1 AND deleted_at IS NULL',
         [param]
       )
       const slug = slugResult.rows[0]?.slug
@@ -43,7 +43,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
       `SELECT v.*, c.label as category_label
        FROM vendors v
        LEFT JOIN categories c ON v.category = c.id
-       WHERE ${isUuidParam ? 'v.id = $1' : 'v.slug = $1'}`,
+       WHERE ${isUuidParam ? 'v.id = $1' : 'v.slug = $1'}
+         AND v.deleted_at IS NULL`,
       [param]
     )
 

@@ -68,7 +68,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
          COALESCE(location_updated_at, '1970-01-01'::timestamptz)
        ) AS last_modified
        FROM vendors
-       WHERE is_active = true AND slug IS NOT NULL`
+       WHERE is_active = true AND slug IS NOT NULL AND deleted_at IS NULL`
     )
     vendorPages = result.rows.map((row) => {
       const esPath = `/vendedor/${row.slug}`

@@ -3,6 +3,9 @@
  * PATCH /api/admin/vendors/[id] — admin actions:
  *   { isActive: true|false }       — activate/deactivate
  *   { emailVerified: true|false }   — override email verification
+ * DELETE /api/admin/vendors/[id]    — soft-delete (sets deleted_at = NOW()).
+ *
+ * Soft-deleted vendors are hidden by default (?includeDeleted=true to see them).
  *
  * POST is intentionally not exported; admin actions are mutually
  * exclusive state transitions, not creates.
@@ -31,6 +34,11 @@ export async function GET(
     return NextResponse.json({ error: 'id inválido' }, { status: 400 })
   }
 
+  // Soft-deleted rows are visible only when explicitly requested — the
+  // typical admin path doesn't want a deleted vendor to show up under
+  // their finger when they paste a stale link.
+  const includeDeleted = new URL(req.url).searchParams.get('includeDeleted') === 'true'
+
   try {
     const result = await pool.query(
       `SELECT
@@ -39,7 +47,7 @@ export async function GET(
          v.business_hours_enabled, v.business_hours_start, v.business_hours_end,
          v.business_days, v.station_type, v.geo_mode,
          v.is_active, v.is_verified,
-         v.photo_url, v.created_at, v.location_updated_at,
+         v.photo_url, v.created_at, v.location_updated_at, v.deleted_at,
          p.id AS profile_id, p.name AS owner_name,
          u.id AS owner_id, u.email, u.phone, u.email_verified,
          u.created_at AS owner_created_at, u.last_login_at,
@@ -47,7 +55,8 @@ export async function GET(
        FROM vendors v
        JOIN profiles p ON p.id = v.profile_id
        JOIN users u ON u.id = p.user_id
-       WHERE v.id = $1`,
+       WHERE v.id = $1
+         ${includeDeleted ? '' : 'AND v.deleted_at IS NULL'}`,
       [id]
     )
     if (result.rows.length === 0) {
@@ -80,6 +89,7 @@ export async function GET(
       photoUrl: r.photo_url,
       createdAt: r.created_at,
       locationUpdatedAt: r.location_updated_at,
+      deletedAt: r.deleted_at,
       productCount: parseInt(r.product_count, 10),
       owner: {
         id: r.owner_id,
@@ -145,19 +155,25 @@ export async function PATCH(
       await client.query('BEGIN')
 
       // Look up the vendor's owner (profile.user_id) so we can flip
-      // email_verified on users, not on vendors.
+      // email_verified on users, not on vendors. Refuse to act on a
+      // soft-deleted vendor — the admin must restore first via the
+      // dedicated endpoint.
       const vendorRow = await client.query(
-        `SELECT v.id, v.profile_id, v.is_active, p.user_id, u.email_verified
+        `SELECT v.id, v.profile_id, v.is_active, v.deleted_at, p.user_id, u.email_verified
          FROM vendors v
          JOIN profiles p ON p.id = v.profile_id
          JOIN users u ON u.id = p.user_id
          WHERE v.id = $1
+           AND v.deleted_at IS NULL
          FOR UPDATE`,
         [id]
       )
       if (vendorRow.rows.length === 0) {
         await client.query('ROLLBACK')
-        return NextResponse.json({ error: 'Vendedor no encontrado' }, { status: 404 })
+        return NextResponse.json(
+          { error: 'Vendedor no encontrado o eliminado' },
+          { status: 404 }
+        )
       }
       const ownerUserId = vendorRow.rows[0].user_id
 
@@ -231,6 +247,91 @@ export async function PATCH(
     }
   } catch (err) {
     logger.error(serializeErr(err), 'admin vendor action error')
+    return NextResponse.json({ error: 'Error interno' }, { status: 500 })
+  }
+}
+
+/**
+ * DELETE /api/admin/vendors/[id] — soft-delete.
+ *
+ * Sets `deleted_at = NOW()`. The vendor stays in the table so historical
+ * products, orders, reviews, favorites, and sponsorships are intact, but
+ * they vanish from every public read. Restoring goes through the
+ * dedicated POST /api/admin/vendors/[id]/restore endpoint.
+ *
+ * Idempotent: a second DELETE against a soft-deleted vendor returns 200
+ * without writing a new deleted_at timestamp or audit row. Returning 200
+ * (not 410) keeps client retries safe.
+ */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireAdmin(req)
+  if (auth instanceof NextResponse) return auth
+
+  const csrf = requireSameOrigin(req)
+  if (csrf) return csrf
+
+  const { allowed, retryAfter } = await checkRateLimit(
+    auth.userId,
+    'admin_vendor_delete',
+    20,
+    60 * 1000
+  )
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Demasiadas acciones', retryAfter },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+    )
+  }
+
+  const { id } = await params
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: 'id inválido' }, { status: 400 })
+  }
+
+  try {
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      const cur = await client.query(
+        `SELECT v.id, v.deleted_at FROM vendors v WHERE v.id = $1 FOR UPDATE`,
+        [id]
+      )
+      if (cur.rows.length === 0) {
+        await client.query('ROLLBACK')
+        return NextResponse.json({ error: 'Vendedor no encontrado' }, { status: 404 })
+      }
+
+      if (cur.rows[0].deleted_at) {
+        // Already soft-deleted — return success, no audit row.
+        await client.query('ROLLBACK')
+        return NextResponse.json({ ok: true, alreadyDeleted: true })
+      }
+
+      await client.query(
+        `UPDATE vendors SET deleted_at = NOW() WHERE id = $1`,
+        [id]
+      )
+
+      await client.query('COMMIT')
+
+      logAdminAction(auth.userId, 'soft_delete_vendor', req, {
+        targetType: 'vendor',
+        targetId: id,
+      })
+
+      return NextResponse.json({ ok: true, deletedAt: new Date().toISOString() })
+    } catch (txErr) {
+      await client.query('ROLLBACK')
+      throw txErr
+    } finally {
+      client.release()
+    }
+  } catch (err) {
+    logger.error(serializeErr(err), 'admin vendor soft-delete error')
     return NextResponse.json({ error: 'Error interno' }, { status: 500 })
   }
 }

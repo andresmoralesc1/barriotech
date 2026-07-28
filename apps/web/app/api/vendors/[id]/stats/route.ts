@@ -23,6 +23,7 @@ export async function GET(req: NextRequest, { params: paramsPromise }: { params:
       `SELECT id, name, description, category, city_id, rating, review_count, photo_url
        FROM vendors
        WHERE id = $1
+         AND deleted_at IS NULL
          AND profile_id IN (SELECT id FROM profiles WHERE user_id = $2)`,
       [vendorId, userId]
     )
@@ -80,7 +81,7 @@ export async function GET(req: NextRequest, { params: paramsPromise }: { params:
                   + COALESCE(v.rating, 0) * 5
                 ) AS score
               FROM vendors v
-              WHERE v.category = $1 AND v.city_id = $2 AND v.is_active = TRUE
+              WHERE v.category = $1 AND v.city_id = $2 AND v.is_active = TRUE AND v.deleted_at IS NULL
             ),
             ranked AS (
               SELECT id, score,

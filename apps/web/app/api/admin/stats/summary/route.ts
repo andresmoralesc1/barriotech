@@ -89,6 +89,8 @@ export async function GET(req: NextRequest) {
       vendorLogins,
     ] = await Promise.all([
       // Vendor totals — a single scan groups by is_active and is_verified.
+      // Soft-deleted rows are excluded entirely so the dashboard numbers
+      // stay aligned with what the public site shows.
       pool.query<{
         total: string
         active: string
@@ -100,7 +102,8 @@ export async function GET(req: NextRequest) {
            COUNT(*) FILTER (WHERE v.is_active = true)                        AS active,
            COUNT(*) FILTER (WHERE v.is_verified = true)                      AS verified,
            COUNT(*) FILTER (WHERE v.created_at >= NOW() - INTERVAL '24h')    AS new24h
-         FROM vendors v`
+         FROM vendors v
+         WHERE v.deleted_at IS NULL`
       ),
       // Client totals — joins users → profiles to read both sides.
       pool.query<{
@@ -118,14 +121,15 @@ export async function GET(req: NextRequest) {
          WHERE u.role = 'buyer'`
       ),
       // Top 5 cities by vendor count — useful for spotting where the
-      // marketplace is densest.
+      // marketplace is densest. Excludes soft-deleted so the top stays
+      // representative of the active marketplace.
       pool.query<{ cityId: string; cityName: string; vendorCount: string }>(
         `SELECT v.city_id AS "cityId",
                 c.name    AS "cityName",
                 COUNT(*)  AS "vendorCount"
          FROM vendors v
          JOIN cities c ON c.id = v.city_id
-         WHERE v.city_id IS NOT NULL
+         WHERE v.city_id IS NOT NULL AND v.deleted_at IS NULL
          GROUP BY v.city_id, c.name
          ORDER BY COUNT(*) DESC
          LIMIT 5`
@@ -199,7 +203,7 @@ export async function GET(req: NextRequest) {
        FROM vendors v
        JOIN profiles p ON p.id = v.profile_id
        JOIN users u ON u.id = p.user_id
-       WHERE u.email_verified = false`
+       WHERE u.email_verified = false AND v.deleted_at IS NULL`
     )
     summary.vendors.pendingEmailVerified = parseInt(
       pendingRes.rows[0]?.count ?? '0',

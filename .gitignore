@@ -10,6 +10,7 @@ data.db
 *.log
 backups/
 *.sql
+!migrations/*.sql
 *.sql.gz
 .DS_Store
 # Backup env files (created during secret rotation)

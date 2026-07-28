@@ -37,6 +37,7 @@ interface AdminVendor {
   isVerified: boolean
   photoUrl: string | null
   createdAt: string
+  deletedAt: string | null
   owner: {
     name: string
     email: string | null
@@ -72,6 +73,15 @@ export function AdminPanel() {
   const [error, setError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<'all' | 'true' | 'false'>('all')
   const [query, setQuery] = useState('')
+  // Tier 2 filter additions — see /api/admin/vendors and /api/admin/clients
+  // for the matching query params. Each is independent and AND-combined.
+  const [cityFilter, setCityFilter] = useState<string>('')
+  const [verifiedFilter, setVerifiedFilter] = useState<'all' | 'true' | 'false'>('all')
+  const [withPhotoFilter, setWithPhotoFilter] = useState<'all' | 'true' | 'false'>('all')
+  const [sinceFilter, setSinceFilter] = useState('') // YYYY-MM-DD
+  const [untilFilter, setUntilFilter] = useState('') // YYYY-MM-DD
+  // Papelera toggle (vendors-only) — when on, list includes soft-deleted.
+  const [showTrash, setShowTrash] = useState(false)
   // Pagination — offset is reset to 0 whenever filters/tab change so the
   // user always lands on the first page of the new view.
   const [offset, setOffset] = useState(0)
@@ -100,8 +110,17 @@ export function AdminPanel() {
   const fetchVendors = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
+    const params = new URLSearchParams({
+      limit: String(PAGE_SIZE),
+      offset: String(offset),
+    })
     if (activeFilter !== 'all') params.set('active', activeFilter)
+    if (cityFilter) params.set('cityId', cityFilter)
+    if (verifiedFilter !== 'all') params.set('verified', verifiedFilter)
+    if (withPhotoFilter !== 'all') params.set('withPhoto', withPhotoFilter)
+    if (sinceFilter) params.set('since', sinceFilter)
+    if (untilFilter) params.set('until', untilFilter)
+    if (showTrash) params.set('includeDeleted', 'true')
     if (query.trim()) params.set('q', query.trim())
     const res = await fetch(`/api/admin/vendors?${params}`)
     if (!res.ok) {
@@ -114,13 +133,17 @@ export function AdminPanel() {
     setVendors(data.vendors)
     setVendorsTotal(data.total)
     setLoading(false)
-  }, [activeFilter, query, offset])
+  }, [activeFilter, cityFilter, verifiedFilter, withPhotoFilter, sinceFilter, untilFilter, showTrash, query, offset])
 
   const fetchClients = useCallback(async () => {
     setLoading(true)
     setError(null)
     const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
     if (activeFilter !== 'all') params.set('active', activeFilter)
+    if (cityFilter) params.set('cityId', cityFilter)
+    if (verifiedFilter !== 'all') params.set('verified', verifiedFilter)
+    if (sinceFilter) params.set('since', sinceFilter)
+    if (untilFilter) params.set('until', untilFilter)
     if (query.trim()) params.set('q', query.trim())
     const res = await fetch(`/api/admin/clients?${params}`)
     if (!res.ok) {
@@ -133,7 +156,7 @@ export function AdminPanel() {
     setClients(data.clients)
     setClientsTotal(data.total)
     setLoading(false)
-  }, [activeFilter, query, offset])
+  }, [activeFilter, cityFilter, verifiedFilter, sinceFilter, untilFilter, query, offset])
 
   useEffect(() => {
     // Tab-driven fetches:
@@ -159,7 +182,17 @@ export function AdminPanel() {
   useEffect(() => {
     setSelectedIds(new Set())
     setOffset(0)
-  }, [tab, activeFilter, query])
+  }, [
+    tab,
+    activeFilter,
+    query,
+    cityFilter,
+    verifiedFilter,
+    withPhotoFilter,
+    sinceFilter,
+    untilFilter,
+    showTrash,
+  ])
 
   const onTabChange = (next: Tab) => {
     setTab(next)
@@ -188,6 +221,12 @@ export function AdminPanel() {
     if (tab !== 'vendors' && tab !== 'clients') return
     const params = new URLSearchParams()
     if (activeFilter !== 'all') params.set('active', activeFilter)
+    if (cityFilter) params.set('cityId', cityFilter)
+    if (verifiedFilter !== 'all') params.set('verified', verifiedFilter)
+    if (sinceFilter) params.set('since', sinceFilter)
+    if (untilFilter) params.set('until', untilFilter)
+    if (tab === 'vendors' && withPhotoFilter !== 'all') params.set('withPhoto', withPhotoFilter)
+    if (tab === 'vendors' && showTrash) params.set('includeDeleted', 'true')
     if (query.trim()) params.set('q', query.trim())
     const url = `/api/admin/${tab}/export?${params.toString()}`
     try {
@@ -211,7 +250,7 @@ export function AdminPanel() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error')
     }
-  }, [tab, activeFilter, query])
+  }, [tab, activeFilter, cityFilter, verifiedFilter, withPhotoFilter, sinceFilter, untilFilter, showTrash, query])
 
   const onVendorAction = async (id: string, body: { isActive?: boolean; emailVerified?: boolean }) => {
     const res = await fetch(`/api/admin/vendors/${id}`, {
@@ -355,11 +394,103 @@ export function AdminPanel() {
                 value={activeFilter}
                 onChange={(e) => setActiveFilter(e.target.value as 'all' | 'true' | 'false')}
                 className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title="Estado activo/inactivo"
               >
                 <option value="all">Todos</option>
                 <option value="true">Activos</option>
                 <option value="false">Inactivos</option>
               </select>
+              {/* City dropdown — the list of city IDs is small and
+                  stable (declared in /migrations), so we hardcode the
+                  options rather than fetching them. Keeps the toolbar
+                  load-free and the dropdown works offline. */}
+              <select
+                value={cityFilter}
+                onChange={(e) => setCityFilter(e.target.value)}
+                className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title="Ciudad"
+              >
+                <option value="">Todas las ciudades</option>
+                <option value="bogota">Bogotá</option>
+                <option value="cali">Cali</option>
+                <option value="medellin">Medellín</option>
+                <option value="barranquilla">Barranquilla</option>
+                <option value="cartagena">Cartagena</option>
+                <option value="pereira">Pereira</option>
+                <option value="bucaramanga">Bucaramanga</option>
+                <option value="manizales">Manizales</option>
+                <option value="armenia">Armenia</option>
+                <option value="neiva">Neiva</option>
+                <option value="ibague">Ibagué</option>
+                <option value="pasto">Pasto</option>
+                <option value="cucuta">Cúcuta</option>
+                <option value="villavicencio">Villavicencio</option>
+                <option value="santa-marta">Santa Marta</option>
+                <option value="sincelejo">Sincelejo</option>
+                <option value="tunja">Tunja</option>
+                <option value="riohacha">Riohacha</option>
+              </select>
+              <select
+                value={verifiedFilter}
+                onChange={(e) => setVerifiedFilter(e.target.value as 'all' | 'true' | 'false')}
+                className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title="Email verificado del propietario"
+              >
+                <option value="all">Email verificado: todos</option>
+                <option value="true">Verificados</option>
+                <option value="false">Sin verificar</option>
+              </select>
+              {/* withPhoto only makes sense for vendors (clients have
+                  no photo); hide on the clients tab to keep the toolbar
+                  honest. */}
+              {tab === 'vendors' && (
+                <select
+                  value={withPhotoFilter}
+                  onChange={(e) => setWithPhotoFilter(e.target.value as 'all' | 'true' | 'false')}
+                  className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  title="Vendedores con foto de perfil"
+                >
+                  <option value="all">Con foto: todos</option>
+                  <option value="true">Con foto</option>
+                  <option value="false">Sin foto</option>
+                </select>
+              )}
+              <label className="flex items-center gap-1 text-sm text-slate-700" title="Alta desde">
+                <span className="text-slate-500">Desde</span>
+                <input
+                  type="date"
+                  value={sinceFilter}
+                  onChange={(e) => setSinceFilter(e.target.value)}
+                  className="px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
+              <label className="flex items-center gap-1 text-sm text-slate-700" title="Alta hasta (exclusivo)">
+                <span className="text-slate-500">Hasta</span>
+                <input
+                  type="date"
+                  value={untilFilter}
+                  onChange={(e) => setUntilFilter(e.target.value)}
+                  className="px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
+              {tab === 'vendors' && (
+                <label
+                  className={`inline-flex items-center gap-2 px-3 py-2 border rounded text-sm cursor-pointer select-none ${
+                    showTrash
+                      ? 'bg-amber-50 border-amber-300 text-amber-900'
+                      : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                  }`}
+                  title="Mostrar también vendedores eliminados (papelera)"
+                >
+                  <input
+                    type="checkbox"
+                    className="accent-amber-600"
+                    checked={showTrash}
+                    onChange={(e) => setShowTrash(e.target.checked)}
+                  />
+                  Mostrar papelera
+                </label>
+              )}
               {/* Export button hits the export endpoint with the same
                   filters currently applied to the table. */}
               <button
@@ -442,8 +573,19 @@ export function AdminPanel() {
       {selectedVendorId && (
         <VendorDetailDrawer
           vendorId={selectedVendorId}
+          allowDeleted={showTrash}
           onClose={() => setSelectedVendorId(null)}
           onAction={onVendorAction}
+          onSoftDeleted={() => {
+            // Refresh the table so the row reflects the new state
+            // (active row count drops by 1, etc.). Don't auto-close —
+            // the drawer stays open with the Restaurar button so the
+            // admin can immediately undo.
+            if (tab === 'vendors') void fetchVendors()
+          }}
+          onRestored={() => {
+            if (tab === 'vendors') void fetchVendors()
+          }}
         />
       )}
 
@@ -529,12 +671,20 @@ function VendorTable({
         <tbody>
           {vendors.map((v) => {
             const isSelected = selectedIds.has(v.id)
+            const isDeleted = !!v.deletedAt
+            // Soft-deleted rows render with a muted, line-through treatment
+            // so they look obviously "in the trash" while the admin still
+            // has the same click affordances (open drawer, restore, etc.).
             return (
               <tr
                 key={v.id}
                 onClick={() => onSelect(v.id)}
                 className={`border-t border-slate-100 cursor-pointer ${
-                  isSelected ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-slate-50'
+                  isSelected
+                    ? 'bg-blue-50/50 hover:bg-blue-50'
+                    : isDeleted
+                      ? 'bg-amber-50/40 hover:bg-amber-50/60'
+                      : 'hover:bg-slate-50'
                 }`}
               >
                 <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
@@ -552,13 +702,15 @@ function VendorTable({
                       <img
                         src={v.photoUrl}
                         alt=""
-                        className="w-8 h-8 rounded-full object-cover"
+                        className={`w-8 h-8 rounded-full object-cover ${isDeleted ? 'opacity-50 grayscale' : ''}`}
                       />
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-slate-200" />
+                      <div className={`w-8 h-8 rounded-full ${isDeleted ? 'bg-amber-100' : 'bg-slate-200'}`} />
                     )}
                     <div>
-                      <div className="font-medium text-slate-900">{v.name}</div>
+                      <div className={`font-medium ${isDeleted ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
+                        {v.name}
+                      </div>
                       <div className="text-xs text-slate-500">{v.owner.name}</div>
                     </div>
                   </div>
@@ -572,7 +724,16 @@ function VendorTable({
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  <StatusBadge active={v.isActive} />
+                  {isDeleted ? (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800"
+                      title={`Eliminado el ${new Date(v.deletedAt!).toLocaleString('es-CO')}`}
+                    >
+                      <span aria-hidden="true">🗑</span> En papelera
+                    </span>
+                  ) : (
+                    <StatusBadge active={v.isActive} />
+                  )}
                 </td>
                 <td className="px-4 py-3 text-slate-500 text-xs">
                   {new Date(v.createdAt).toLocaleDateString('es-CO')}

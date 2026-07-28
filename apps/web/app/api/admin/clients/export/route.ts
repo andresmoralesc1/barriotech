@@ -45,6 +45,8 @@ export async function GET(req: NextRequest) {
   const verified = url.searchParams.get('verified')
   const q = url.searchParams.get('q')?.trim()
   const cityId = url.searchParams.get('cityId')
+  const since = url.searchParams.get('since')
+  const until = url.searchParams.get('until')
 
   const conditions: string[] = ['u.role = $1']
   const params: unknown[] = ['buyer']
@@ -56,6 +58,14 @@ export async function GET(req: NextRequest) {
   if (cityId) {
     params.push(cityId)
     conditions.push(`u.city_id = $${params.length}`)
+  }
+  if (since) {
+    params.push(since)
+    conditions.push(`u.created_at >= $${params.length}`)
+  }
+  if (until) {
+    params.push(until)
+    conditions.push(`u.created_at < $${params.length}`)
   }
   if (q) {
     params.push(`%${q}%`)
@@ -112,7 +122,7 @@ export async function GET(req: NextRequest) {
     const csv = toCsv(headers, rows)
 
     logAdminAction(auth.userId, 'export_clients_csv', req, {
-      metadata: { filters: { active, verified, q, cityId }, rows: rows.length },
+      metadata: { filters: { active, verified, q, cityId, since, until }, rows: rows.length },
     })
 
     const datestamp = new Date().toISOString().slice(0, 10)
