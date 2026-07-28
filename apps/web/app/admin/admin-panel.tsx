@@ -70,6 +70,9 @@ export function AdminPanel() {
   const [error, setError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<'all' | 'true' | 'false'>('all')
   const [query, setQuery] = useState('')
+  // Pagination — offset is reset to 0 whenever filters/tab change so the
+  // user always lands on the first page of the new view.
+  const [offset, setOffset] = useState(0)
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null)
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
 
@@ -88,7 +91,7 @@ export function AdminPanel() {
   const fetchVendors = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: '0' })
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
     if (activeFilter !== 'all') params.set('active', activeFilter)
     if (query.trim()) params.set('q', query.trim())
     const res = await fetch(`/api/admin/vendors?${params}`)
@@ -102,12 +105,12 @@ export function AdminPanel() {
     setVendors(data.vendors)
     setVendorsTotal(data.total)
     setLoading(false)
-  }, [activeFilter, query])
+  }, [activeFilter, query, offset])
 
   const fetchClients = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: '0' })
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
     if (activeFilter !== 'all') params.set('active', activeFilter)
     if (query.trim()) params.set('q', query.trim())
     const res = await fetch(`/api/admin/clients?${params}`)
@@ -121,16 +124,20 @@ export function AdminPanel() {
     setClients(data.clients)
     setClientsTotal(data.total)
     setLoading(false)
-  }, [activeFilter, query])
+  }, [activeFilter, query, offset])
 
   useEffect(() => {
     if (tab === 'vendors') fetchVendors()
     else fetchClients()
   }, [tab, fetchVendors, fetchClients])
 
-  // Reset selection when the data changes (filters/tab/refetch).
+  // Reset selection AND page when the filter context changes. Resetting
+  // selection alone would leave a stale set whose ids might no longer be
+  // on screen, and resetting page keeps "page 5 of filtered" from
+  // appearing empty after the user narrows the search.
   useEffect(() => {
     setSelectedIds(new Set())
+    setOffset(0)
   }, [tab, activeFilter, query])
 
   const onTabChange = (next: Tab) => {
@@ -284,20 +291,36 @@ export function AdminPanel() {
           {loading ? (
             <div className="p-12 text-center text-slate-500">Cargando…</div>
           ) : tab === 'vendors' ? (
-            <VendorTable
-              vendors={vendors}
-              selectedIds={selectedIds}
-              onToggleOne={toggleOne}
-              onToggleAll={toggleAll}
-              allSelected={allOnPageSelected}
-              someSelected={someOnPageSelected}
-              onSelect={(id) => setSelectedVendorId(id)}
-            />
+            <>
+              <VendorTable
+                vendors={vendors}
+                selectedIds={selectedIds}
+                onToggleOne={toggleOne}
+                onToggleAll={toggleAll}
+                allSelected={allOnPageSelected}
+                someSelected={someOnPageSelected}
+                onSelect={(id) => setSelectedVendorId(id)}
+              />
+              <PaginationBar
+                total={vendorsTotal}
+                offset={offset}
+                pageSize={PAGE_SIZE}
+                onChange={setOffset}
+              />
+            </>
           ) : (
-            <ClientTable
-              clients={clients}
-              onSelect={(id) => setSelectedClientId(id)}
-            />
+            <>
+              <ClientTable
+                clients={clients}
+                onSelect={(id) => setSelectedClientId(id)}
+              />
+              <PaginationBar
+                total={clientsTotal}
+                offset={offset}
+                pageSize={PAGE_SIZE}
+                onChange={setOffset}
+              />
+            </>
           )}
         </div>
       </div>
@@ -533,6 +556,154 @@ function StatusBadge({ active }: { active: boolean }) {
       {active ? 'Activo' : 'Inactivo'}
     </span>
   )
+}
+
+/**
+ * Pagination bar — shows the visible range and prev/next + page numbers.
+ *
+ * Why custom and not a UI lib? Two reasons: (a) the layout below the
+ * table is small and bespoke enough that the dependency cost outweighs
+ * the benefit, and (b) we want exact control over the visible page list
+ * (ellipsis for long ranges).
+ *
+ * Page number strategy: always show first, last, current, current ±1,
+ * and ellipses for the gap. With PAGE_SIZE=25 and a typical admin table
+ * this stays under 7 buttons even at 1000+ rows.
+ */
+function PaginationBar({
+  total,
+  offset,
+  pageSize,
+  onChange,
+}: {
+  total: number
+  offset: number
+  pageSize: number
+  onChange: (offset: number) => void
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const currentPage = Math.floor(offset / pageSize) + 1
+
+  // Don't render anything when there's nothing to paginate.
+  if (total === 0) {
+    return (
+      <div className="px-4 py-3 border-t border-slate-200 text-xs text-slate-500 text-center">
+        Sin resultados
+      </div>
+    )
+  }
+  if (totalPages === 1) {
+    return (
+      <div className="px-4 py-3 border-t border-slate-200 text-xs text-slate-500 text-center">
+        {total} resultado{total === 1 ? '' : 's'}
+      </div>
+    )
+  }
+
+  const first = offset + 1
+  const last = Math.min(offset + pageSize, total)
+  const canPrev = currentPage > 1
+  const canNext = currentPage < totalPages
+
+  const pageNumbers = buildPageList(currentPage, totalPages)
+
+  return (
+    <nav
+      aria-label="Paginación"
+      className="px-4 py-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3"
+    >
+      <span className="text-xs text-slate-600">
+        Mostrando <strong>{first}–{last}</strong> de <strong>{total}</strong>
+      </span>
+      <div className="flex items-center gap-1">
+        <PageBtn
+          onClick={() => onChange((currentPage - 2) * pageSize)}
+          disabled={!canPrev}
+          aria-label="Página anterior"
+        >
+          ‹ Anterior
+        </PageBtn>
+        {pageNumbers.map((p, i) =>
+          p === '…' ? (
+            <span key={`gap-${i}`} className="px-2 text-slate-400" aria-hidden="true">
+              …
+            </span>
+          ) : (
+            <PageBtn
+              key={p}
+              onClick={() => onChange((p - 1) * pageSize)}
+              active={p === currentPage}
+              aria-label={`Página ${p}`}
+              aria-current={p === currentPage ? 'page' : undefined}
+            >
+              {p}
+            </PageBtn>
+          )
+        )}
+        <PageBtn
+          onClick={() => onChange(currentPage * pageSize)}
+          disabled={!canNext}
+          aria-label="Página siguiente"
+        >
+          Siguiente ›
+        </PageBtn>
+      </div>
+    </nav>
+  )
+}
+
+function PageBtn({
+  children,
+  onClick,
+  disabled,
+  active,
+  ...rest
+}: {
+  children: React.ReactNode
+  onClick: () => void
+  disabled?: boolean
+  active?: boolean
+  [k: string]: unknown
+}) {
+  const base = 'min-w-[2.25rem] px-2.5 py-1.5 text-xs rounded font-medium transition-colors'
+  const tone = active
+    ? 'bg-blue-600 text-white'
+    : disabled
+      ? 'text-slate-300 cursor-not-allowed'
+      : 'text-slate-700 hover:bg-slate-100'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`${base} ${tone}`}
+      {...rest}
+    >
+      {children}
+    </button>
+  )
+}
+
+/**
+ * Build a compact page list: always show first, last, current ±1, with
+ * ellipses for the gap. Returns an array of either numbers or '…'.
+ *
+ * Example for currentPage=5, totalPages=12:
+ *   [1, '…', 4, 5, 6, '…', 12]
+ */
+function buildPageList(current: number, total: number): Array<number | '…'> {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1)
+  }
+  const pages: Array<number | '…'> = []
+  pages.push(1)
+  if (current > 3) pages.push('…')
+  for (let p = Math.max(2, current - 1); p <= Math.min(total - 1, current + 1); p++) {
+    pages.push(p)
+  }
+  if (current < total - 2) pages.push('…')
+  pages.push(total)
+  return pages
 }
 
 function BatchActionBar({
