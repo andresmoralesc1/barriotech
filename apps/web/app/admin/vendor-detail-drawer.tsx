@@ -45,6 +45,40 @@ interface VendorDetail {
     createdAt: string
     lastLoginAt: string | null
   }
+  recentReviews: Array<{
+    id: string
+    rating: number
+    comment: string | null
+    authorName: string
+    userId: string | null
+    createdAt: string
+  }>
+  reviewStats: {
+    total: number
+    averageRating: number
+    distribution: { 1: number; 2: number; 3: number; 4: number; 5: number }
+  }
+  activeSponsorship: {
+    id: string
+    plan: string
+    amountCents: number
+    startsAt: string
+    endsAt: string
+    status: string
+    daysRemaining: number
+  } | null
+  orderStats: { total: number; last30Days: number }
+}
+
+interface AdminNote {
+  id: string
+  target_type: 'user' | 'vendor'
+  target_id: string
+  author_id: string
+  author_email: string | null
+  author_name: string
+  body: string
+  created_at: string
 }
 
 export function VendorDetailDrawer({
@@ -77,6 +111,15 @@ export function VendorDetailDrawer({
   const [deletePending, setDeletePending] = useState(false)
   const [restorePending, setRestorePending] = useState(false)
 
+  // Admin notes state (mirrors ClientDetailDrawer; the same /api/admin/notes
+  // endpoint supports target_type='vendor').
+  const [notes, setNotes] = useState<AdminNote[]>([])
+  const [notesLoading, setNotesLoading] = useState(false)
+  const [noteDraft, setNoteDraft] = useState('')
+  const [notePending, setNotePending] = useState(false)
+  const [noteError, setNoteError] = useState<string | null>(null)
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null)
+
   const loadVendor = (id: string) => {
     setLoading(true)
     setError(null)
@@ -102,6 +145,91 @@ export function VendorDetailDrawer({
     void loadVendor(vendorId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vendorId, allowDeleted])
+
+  // Notes: fetched on mount + after every successful POST/DELETE.
+  // Mirrors the ClientDetailDrawer implementation — same endpoint,
+  // same optimistic-insert pattern. Tied to the open vendorId, so
+  // switching vendors between drawer opens re-fetches.
+  const loadNotes = async () => {
+    setNotesLoading(true)
+    try {
+      const r = await fetch(
+        `/api/admin/notes?targetType=vendor&targetId=${vendorId}`
+      )
+      if (r.ok) {
+        const data = await r.json()
+        setNotes(data.notes ?? [])
+      }
+    } catch {
+      // silent — notes are best-effort
+    } finally {
+      setNotesLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadNotes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendorId])
+
+  const submitNote = async () => {
+    const trimmed = noteDraft.trim()
+    if (trimmed.length === 0) {
+      setNoteError('La nota no puede estar vacía')
+      return
+    }
+    if (trimmed.length > 2000) {
+      setNoteError('La nota no puede superar 2000 caracteres')
+      return
+    }
+    setNotePending(true)
+    setNoteError(null)
+    try {
+      const r = await fetch('/api/admin/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetType: 'vendor',
+          targetId: vendorId,
+          body: trimmed,
+        }),
+      })
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}))
+        throw new Error(data.error ?? `Error ${r.status}`)
+      }
+      const data = await r.json()
+      setNotes((prev) => [
+        {
+          ...(data.note as Omit<AdminNote, 'author_email' | 'author_name'>),
+          author_email: null,
+          author_name: 'Tú',
+        },
+        ...prev,
+      ])
+      setNoteDraft('')
+    } catch (e: any) {
+      setNoteError(e.message ?? 'Error desconocido')
+    } finally {
+      setNotePending(false)
+    }
+  }
+
+  const deleteNote = async (noteId: string) => {
+    setDeletingNoteId(noteId)
+    try {
+      const r = await fetch(`/api/admin/notes/${noteId}`, { method: 'DELETE' })
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}))
+        throw new Error(data.error ?? `Error ${r.status}`)
+      }
+      setNotes((prev) => prev.filter((n) => n.id !== noteId))
+    } catch (e: any) {
+      setNoteError(e.message ?? 'Error al eliminar')
+    } finally {
+      setDeletingNoteId(null)
+    }
+  }
 
   // Close on Escape
   useEffect(() => {
@@ -269,6 +397,163 @@ export function VendorDetailDrawer({
                   : 'Nunca'
               } />
             </Section>
+
+            <Section title="Actividad">
+              <Field
+                label="Pedidos totales"
+                value={String(vendor.orderStats.total)}
+              />
+              <Field
+                label="Pedidos (30 días)"
+                value={String(vendor.orderStats.last30Days)}
+              />
+              <Field
+                label="Reseñas"
+                value={
+                  vendor.reviewStats.total > 0
+                    ? `${vendor.reviewStats.total} (★ ${vendor.reviewStats.averageRating.toFixed(1)})`
+                    : '0'
+                }
+              />
+            </Section>
+
+            <Section title="Patrocinio">
+              {vendor.activeSponsorship ? (
+                <>
+                  <Field label="Plan" value={vendor.activeSponsorship.plan} />
+                  <Field
+                    label="Monto"
+                    value={`$${(vendor.activeSponsorship.amountCents / 100).toLocaleString('es-CO')} COP`}
+                  />
+                  <Field
+                    label="Vence"
+                    value={new Date(vendor.activeSponsorship.endsAt).toLocaleString('es-CO')}
+                  />
+                  <Field
+                    label="Días restantes"
+                    value={String(vendor.activeSponsorship.daysRemaining)}
+                  />
+                </>
+              ) : (
+                <div className="text-sm text-slate-500 italic">Sin patrocinio activo</div>
+              )}
+            </Section>
+
+            <div className="border-t border-slate-200 pt-6 space-y-3">
+              <h4 className="font-semibold text-slate-900 text-sm">Reseñas recientes</h4>
+              {vendor.reviewStats.total === 0 ? (
+                <div className="text-sm text-slate-500 italic">Sin reseñas todavía.</div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="text-slate-500">Distribución:</span>
+                    {([5, 4, 3, 2, 1] as const).map((star) => (
+                      <span key={star} className="text-xs text-slate-600">
+                        ★{star}: {vendor.reviewStats.distribution[star]}
+                      </span>
+                    ))}
+                  </div>
+                  <ul className="space-y-2">
+                    {vendor.recentReviews.map((rv) => (
+                      <li
+                        key={rv.id}
+                        className="bg-slate-50 rounded p-3 text-sm border border-slate-200"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-xs text-slate-500">
+                            <span className="font-medium text-slate-700">{rv.authorName}</span>
+                            <span className="text-slate-400">
+                              {' · '}
+                              {new Date(rv.createdAt).toLocaleString('es-CO')}
+                            </span>
+                          </div>
+                          <div className="text-amber-600 font-semibold">
+                            {'★'.repeat(rv.rating)}
+                            <span className="text-slate-300">
+                              {'★'.repeat(5 - rv.rating)}
+                            </span>
+                          </div>
+                        </div>
+                        {rv.comment && (
+                          <p className="mt-1 text-slate-900 whitespace-pre-wrap break-words">
+                            {rv.comment}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+
+            <div className="border-t border-slate-200 pt-6 space-y-3">
+              <h4 className="font-semibold text-slate-900 text-sm">Notas internas</h4>
+              <p className="text-xs text-slate-500">
+                Anotaciones visibles para todos los administradores. No se muestran al público.
+              </p>
+
+              <textarea
+                value={noteDraft}
+                onChange={(e) => setNoteDraft(e.target.value)}
+                placeholder="Ej. Patrocinio renovado por queja resuelta, no requiere contacto."
+                rows={3}
+                maxLength={2000}
+                disabled={notePending}
+                className="w-full px-3 py-2 border border-slate-300 rounded text-sm resize-y focus:outline-none focus:border-blue-500 disabled:opacity-50"
+              />
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-slate-500">{noteDraft.length} / 2000</span>
+                <button
+                  onClick={submitNote}
+                  disabled={notePending || noteDraft.trim().length === 0}
+                  className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded font-medium hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {notePending ? 'Guardando…' : 'Agregar nota'}
+                </button>
+              </div>
+              {noteError && <div className="text-red-700 text-xs">{noteError}</div>}
+
+              {notesLoading && notes.length === 0 && (
+                <div className="text-slate-500 text-sm">Cargando notas…</div>
+              )}
+              {!notesLoading && notes.length === 0 && (
+                <div className="text-slate-500 text-sm italic">Sin notas todavía.</div>
+              )}
+              {notes.length > 0 && (
+                <ul className="space-y-2">
+                  {notes.map((n) => (
+                    <li
+                      key={n.id}
+                      className="bg-slate-50 rounded p-3 text-sm border border-slate-200"
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="text-xs text-slate-500">
+                          <span className="font-medium text-slate-700">{n.author_name}</span>
+                          {n.author_email && (
+                            <span className="text-slate-400"> · {n.author_email}</span>
+                          )}
+                          <span className="text-slate-400">
+                            {' · '}
+                            {new Date(n.created_at).toLocaleString('es-CO')}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => deleteNote(n.id)}
+                          disabled={deletingNoteId === n.id}
+                          className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50"
+                          title="Eliminar nota"
+                        >
+                          {deletingNoteId === n.id ? '…' : 'Eliminar'}
+                        </button>
+                      </div>
+                      <p className="mt-1 text-slate-900 whitespace-pre-wrap break-words">
+                        {n.body}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             <div className="border-t border-slate-200 pt-6 space-y-3">
               <h4 className="font-semibold text-slate-900 text-sm">Acciones</h4>

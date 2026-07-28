@@ -64,6 +64,61 @@ export async function GET(
     }
 
     const r = result.rows[0]
+
+    // Drill-down enrichment: reviews (top 5 + all-time stats), active
+    // sponsorship, and last-30-day order counts. All run as parallel
+    // independent queries against indexes (idx_reviews_vendor_id,
+    // idx_sponsorships_vendor_active, idx_orders_vendor_id), so a
+    // drawer open is at most ~5 small SELECTs — no risk of a slow
+    // response for a vendor with 10k reviews.
+    const [
+      recentReviewsRes,
+      reviewStatsRes,
+      activeSponsorshipRes,
+      orderStatsRes,
+    ] = await Promise.all([
+      pool.query(
+        `SELECT id, rating, comment, author_name, user_id, created_at
+           FROM reviews
+          WHERE vendor_id = $1
+          ORDER BY created_at DESC
+          LIMIT 5`,
+        [id]
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS total,
+                COALESCE(AVG(rating)::numeric(10,2), 0) AS avg_rating,
+                COUNT(*) FILTER (WHERE rating = 1)::int AS r1,
+                COUNT(*) FILTER (WHERE rating = 2)::int AS r2,
+                COUNT(*) FILTER (WHERE rating = 3)::int AS r3,
+                COUNT(*) FILTER (WHERE rating = 4)::int AS r4,
+                COUNT(*) FILTER (WHERE rating = 5)::int AS r5
+           FROM reviews
+          WHERE vendor_id = $1`,
+        [id]
+      ),
+      pool.query(
+        `SELECT id, plan, amount_cents, starts_at, ends_at, status,
+                GREATEST(0, EXTRACT(DAY FROM (ends_at - NOW()))::int) AS days_remaining
+           FROM sponsorships
+          WHERE vendor_id = $1 AND status = 'active' AND ends_at > NOW()
+          ORDER BY ends_at DESC
+          LIMIT 1`,
+        [id]
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days')::int AS last_30
+           FROM orders
+          WHERE vendor_id = $1`,
+        [id]
+      ),
+    ])
+
+    const reviewStatsRow = reviewStatsRes.rows[0] || {
+      total: 0, avg_rating: 0, r1: 0, r2: 0, r3: 0, r4: 0, r5: 0,
+    }
+
     const vendor = {
       id: r.id,
       name: r.name,
@@ -100,6 +155,40 @@ export async function GET(
         emailVerified: r.email_verified,
         createdAt: r.owner_created_at,
         lastLoginAt: r.last_login_at,
+      },
+      recentReviews: recentReviewsRes.rows.map((rv) => ({
+        id: rv.id,
+        rating: rv.rating,
+        comment: rv.comment,
+        authorName: rv.author_name,
+        userId: rv.user_id,
+        createdAt: rv.created_at,
+      })),
+      reviewStats: {
+        total: reviewStatsRow.total,
+        averageRating: parseFloat(reviewStatsRow.avg_rating),
+        distribution: {
+          1: reviewStatsRow.r1,
+          2: reviewStatsRow.r2,
+          3: reviewStatsRow.r3,
+          4: reviewStatsRow.r4,
+          5: reviewStatsRow.r5,
+        },
+      },
+      activeSponsorship: activeSponsorshipRes.rows[0]
+        ? {
+            id: activeSponsorshipRes.rows[0].id,
+            plan: activeSponsorshipRes.rows[0].plan,
+            amountCents: parseInt(activeSponsorshipRes.rows[0].amount_cents, 10),
+            startsAt: activeSponsorshipRes.rows[0].starts_at,
+            endsAt: activeSponsorshipRes.rows[0].ends_at,
+            status: activeSponsorshipRes.rows[0].status,
+            daysRemaining: activeSponsorshipRes.rows[0].days_remaining,
+          }
+        : null,
+      orderStats: {
+        total: orderStatsRes.rows[0]?.total ?? 0,
+        last30Days: orderStatsRes.rows[0]?.last_30 ?? 0,
       },
     }
 
