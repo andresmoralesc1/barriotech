@@ -116,6 +116,12 @@ export function AdminPanel() {
   // changing tabs doesn't lose the order window.
   const [orderSinceFilter, setOrderSinceFilter] = useState('') // YYYY-MM-DD
   const [orderUntilFilter, setOrderUntilFilter] = useState('')
+  // Tier 12: orders total range filter. Backend supports minTotal /
+  // maxTotal since tier 6; same gap as the date filter. Stored as
+  // strings because the input is uncontrolled-by-step and the user
+  // might type values like "100,50" — parseFloat handles that fine.
+  const [orderMinTotal, setOrderMinTotal] = useState('')
+  const [orderMaxTotal, setOrderMaxTotal] = useState('')
 
   // Tier 8: dashboard recent-activity deep-links to the audit log with
   // the action of the clicked row pre-filled in the filter.
@@ -214,6 +220,15 @@ export function AdminPanel() {
     if (orderQuery.trim()) params.set('q', orderQuery.trim())
     if (orderSinceFilter) params.set('since', orderSinceFilter)
     if (orderUntilFilter) params.set('until', orderUntilFilter)
+    // Tier 12: only forward non-empty values. The backend rejects
+    // unparseable values with 400; we guard with Number.isFinite so
+    // the user can clear the field without server round-tripping.
+    if (orderMinTotal.trim() && Number.isFinite(parseFloat(orderMinTotal))) {
+      params.set('minTotal', orderMinTotal.trim())
+    }
+    if (orderMaxTotal.trim() && Number.isFinite(parseFloat(orderMaxTotal))) {
+      params.set('maxTotal', orderMaxTotal.trim())
+    }
     const res = await fetch(`/api/admin/orders?${params}`)
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
@@ -225,7 +240,7 @@ export function AdminPanel() {
     setOrders(data.orders)
     setOrdersTotal(data.total)
     setLoading(false)
-  }, [orderStatusFilter, orderQuery, orderSinceFilter, orderUntilFilter, offset])
+  }, [orderStatusFilter, orderQuery, orderSinceFilter, orderUntilFilter, orderMinTotal, orderMaxTotal, offset])
 
   useEffect(() => {
     // Tab-driven fetches:
@@ -588,6 +603,35 @@ export function AdminPanel() {
                     onChange={(e) => setOrderUntilFilter(e.target.value)}
                     className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     title="Hasta (excl.)"
+                  />
+                  {/* Tier 12: total range filter. Stored as strings for
+                      the same reason as the date inputs — the user
+                      can clear the field without triggering a fetch.
+                      The backend treats both bounds as numeric(10,2)
+                      and rejects negative values with 400. */}
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="100"
+                    placeholder="Total mín."
+                    aria-label="Total mínimo"
+                    value={orderMinTotal}
+                    onChange={(e) => setOrderMinTotal(e.target.value)}
+                    className="w-32 px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    title="Total mínimo (COP)"
+                  />
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="100"
+                    placeholder="Total máx."
+                    aria-label="Total máximo"
+                    value={orderMaxTotal}
+                    onChange={(e) => setOrderMaxTotal(e.target.value)}
+                    className="w-32 px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    title="Total máximo (COP)"
                   />
                 </>
               ) : (
