@@ -1,0 +1,240 @@
+/**
+ * GET   /api/admin/vendors/[id] — full vendor detail (admin only).
+ * PATCH /api/admin/vendors/[id] — admin actions:
+ *   { isActive: true|false }       — activate/deactivate
+ *   { emailVerified: true|false }   — override email verification
+ *
+ * POST is intentionally not exported; admin actions are mutually
+ * exclusive state transitions, not creates.
+ *
+ * Every successful action is written to admin_audit_log.
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/auth'
+import pool from '@/lib/db'
+import { checkRateLimit } from '@/lib/rate-limit'
+import { parseJsonBody } from '@/lib/parse-json'
+import { requireSameOrigin } from '@/lib/csrf'
+import { logger, serializeErr } from '@/lib/logger'
+import { logAdminAction } from '@/lib/admin-audit'
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireAdmin(req)
+  if (auth instanceof NextResponse) return auth
+
+  const { id } = await params
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: 'id inválido' }, { status: 400 })
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT
+         v.id, v.name, v.slug, v.category, v.description, v.phone,
+         v.city_id, v.latitude, v.longitude, v.vehicle_type, v.vehicle_photo_url,
+         v.business_hours_enabled, v.business_hours_start, v.business_hours_end,
+         v.business_days, v.station_type, v.geo_mode,
+         v.is_active, v.is_verified,
+         v.photo_url, v.created_at, v.location_updated_at,
+         p.id AS profile_id, p.name AS owner_name,
+         u.id AS owner_id, u.email, u.phone, u.email_verified,
+         u.created_at AS owner_created_at, u.last_login_at,
+         (SELECT COUNT(*) FROM products WHERE vendor_id = v.id) AS product_count
+       FROM vendors v
+       JOIN profiles p ON p.id = v.profile_id
+       JOIN users u ON u.id = p.user_id
+       WHERE v.id = $1`,
+      [id]
+    )
+    if (result.rows.length === 0) {
+      return NextResponse.json({ error: 'Vendedor no encontrado' }, { status: 404 })
+    }
+
+    const r = result.rows[0]
+    const vendor = {
+      id: r.id,
+      name: r.name,
+      slug: r.slug,
+      category: r.category,
+      description: r.description,
+      phone: r.phone,
+      cityId: r.city_id,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      vehicleType: r.vehicle_type,
+      vehiclePhotoUrl: r.vehicle_photo_url,
+      businessHours: {
+        enabled: r.business_hours_enabled,
+        start: r.business_hours_start,
+        end: r.business_hours_end,
+        days: r.business_days,
+      },
+      stationType: r.station_type,
+      geoMode: r.geo_mode,
+      isActive: r.is_active,
+      isVerified: r.is_verified,
+      photoUrl: r.photo_url,
+      createdAt: r.created_at,
+      locationUpdatedAt: r.location_updated_at,
+      productCount: parseInt(r.product_count, 10),
+      owner: {
+        id: r.owner_id,
+        profileId: r.profile_id,
+        name: r.owner_name,
+        email: r.email,
+        phone: r.phone,
+        emailVerified: r.email_verified,
+        createdAt: r.owner_created_at,
+        lastLoginAt: r.last_login_at,
+      },
+    }
+
+    logAdminAction(auth.userId, 'view_vendor_detail', req, {
+      targetType: 'vendor',
+      targetId: id,
+    })
+
+    return NextResponse.json({ vendor })
+  } catch (err) {
+    logger.error(serializeErr(err), 'admin vendor detail error')
+    return NextResponse.json({ error: 'Error interno' }, { status: 500 })
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireAdmin(req)
+  if (auth instanceof NextResponse) return auth
+
+  const csrf = requireSameOrigin(req)
+  if (csrf) return csrf
+
+  const { allowed, retryAfter } = await checkRateLimit(
+    auth.userId,
+    'admin_vendor_action',
+    30,
+    60 * 1000
+  )
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Demasiadas acciones', retryAfter },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+    )
+  }
+
+  const { id } = await params
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: 'id inválido' }, { status: 400 })
+  }
+
+  const parsed = await parseJsonBody(req)
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 })
+  }
+  const body = parsed.body as Record<string, unknown>
+
+  try {
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      // Look up the vendor's owner (profile.user_id) so we can flip
+      // email_verified on users, not on vendors.
+      const vendorRow = await client.query(
+        `SELECT v.id, v.profile_id, v.is_active, p.user_id, u.email_verified
+         FROM vendors v
+         JOIN profiles p ON p.id = v.profile_id
+         JOIN users u ON u.id = p.user_id
+         WHERE v.id = $1
+         FOR UPDATE`,
+        [id]
+      )
+      if (vendorRow.rows.length === 0) {
+        await client.query('ROLLBACK')
+        return NextResponse.json({ error: 'Vendedor no encontrado' }, { status: 404 })
+      }
+      const ownerUserId = vendorRow.rows[0].user_id
+
+      const actions: Array<{ action: 'activate_vendor' | 'deactivate_vendor' | 'override_email_verification'; metadata: Record<string, unknown> }> = []
+
+      if (typeof body.isActive === 'boolean') {
+        const next = body.isActive
+        const prev = vendorRow.rows[0].is_active
+        if (prev !== next) {
+          await client.query('UPDATE vendors SET is_active = $1 WHERE id = $2', [next, id])
+          actions.push({
+            action: next ? 'activate_vendor' : 'deactivate_vendor',
+            metadata: { previous: prev, next },
+          })
+        }
+      }
+
+      if (typeof body.emailVerified === 'boolean') {
+        const next = body.emailVerified
+        const prev = vendorRow.rows[0].email_verified
+        if (prev !== next) {
+          await client.query(
+            'UPDATE users SET email_verified = $1 WHERE id = $2',
+            [next, ownerUserId]
+          )
+          actions.push({
+            action: 'override_email_verification',
+            metadata: { previous: prev, next, target: 'user.email_verified' },
+          })
+        }
+      }
+
+      if (actions.length === 0) {
+        await client.query('ROLLBACK')
+        return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 })
+      }
+
+      // Fetch the updated state to return.
+      const updated = await client.query(
+        `SELECT v.is_active, u.email_verified FROM vendors v
+         JOIN profiles p ON p.id = v.profile_id
+         JOIN users u ON u.id = p.user_id
+         WHERE v.id = $1`,
+        [id]
+      )
+
+      await client.query('COMMIT')
+
+      // Audit AFTER commit so a rolled-back transaction leaves no trace.
+      for (const a of actions) {
+        await logAdminAction(auth.userId, a.action, req, {
+          targetType: 'vendor',
+          targetId: id,
+          metadata: a.metadata,
+        })
+      }
+
+      return NextResponse.json({
+        ok: true,
+        vendor: {
+          isActive: updated.rows[0].is_active,
+          ownerEmailVerified: updated.rows[0].email_verified,
+        },
+        actions: actions.map((a) => a.action),
+      })
+    } catch (txErr) {
+      await client.query('ROLLBACK')
+      throw txErr
+    } finally {
+      client.release()
+    }
+  } catch (err) {
+    logger.error(serializeErr(err), 'admin vendor action error')
+    return NextResponse.json({ error: 'Error interno' }, { status: 500 })
+  }
+}
+
+function isUuid(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+}

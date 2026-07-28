@@ -70,10 +70,19 @@ export async function proxy(req: NextRequest) {
     return response
   }
 
-  // Seller-only routes
+  // Seller-only routes — admins are exempt; they can view the dashboard.
   if (SELLER_ROUTES.some((r) => pathname.startsWith(r))) {
-    if (decoded.role !== 'seller') {
+    if (decoded.role !== 'seller' && decoded.role !== 'admin') {
       const redirect = NextResponse.redirect(new URL('/map', req.url))
+      redirect.headers.set('x-request-id', requestId)
+      return redirect
+    }
+  }
+
+  // /admin route — admins only. Non-admins get bounced to /dashboard.
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+    if (decoded.role !== 'admin') {
+      const redirect = NextResponse.redirect(new URL('/dashboard', req.url))
       redirect.headers.set('x-request-id', requestId)
       return redirect
     }

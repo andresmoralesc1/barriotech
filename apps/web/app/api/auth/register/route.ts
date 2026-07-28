@@ -64,6 +64,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Role must be explicit — silent default to 'buyer' would surprise sellers.
+    // SPRINT admin (2026-07-27): 'admin' is NOT in this list on purpose. The
+    // DB CHECK now allows it (migration 027), but self-registration must
+    // never produce an admin. Promotions go through
+    // scripts/dev/create-admin.js.
     if (role !== 'buyer' && role !== 'seller') {
       return NextResponse.json(
         { error: 'Selecciona un tipo de cuenta: vendedor o comprador' },

@@ -78,7 +78,12 @@ export function LoginForm({ isLoading, error, setError, setIsLoading }: Props) {
         // explicit so future refactors don't break the EmailVerifyBanner.
         emailVerified: data.user.emailVerified ?? data.emailVerified ?? false,
       })
-      if (data.user.role === 'seller') {
+      // Admin → /admin (super admin panel). Sellers → /dashboard.
+      // Buyers → /map. The redirect chain is short-lived because
+      // /admin and /dashboard both run their own server-side auth.
+      if (data.user.role === 'admin') {
+        router.push('/admin')
+      } else if (data.user.role === 'seller') {
         router.push('/dashboard')
       } else {
         router.push('/map')

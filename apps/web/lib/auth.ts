@@ -201,7 +201,7 @@ export async function requireAuth(
  */
 export interface VerifiedUser {
   userId: string
-  role: 'buyer' | 'seller'
+  role: 'buyer' | 'seller' | 'admin'
   emailVerified: true
 }
 
@@ -226,7 +226,40 @@ export async function requireVerifiedEmail(
   }
   return {
     userId: auth.userId,
-    role: auth.role as 'buyer' | 'seller',
+    role: auth.role as 'buyer' | 'seller' | 'admin',
     emailVerified: true,
   }
+}
+
+/**
+ * requireAdmin — gates /api/admin/* endpoints.
+ *
+ * Admins are users with role='admin' (set via migration 027 + manual
+ * promotion script, NEVER via self-registration). The register endpoint
+ * rejects role='admin' on POST.
+ *
+ * Email verification is intentionally NOT required — admins are
+ * trusted operators, and the field agent who got promoted might not
+ * have a verified email yet. The JWT itself is the trust anchor.
+ */
+export interface AdminUser {
+  userId: string
+  role: 'admin'
+}
+
+export async function requireAdmin(
+  req: NextRequest
+): Promise<AdminUser | NextResponse> {
+  const auth = await requireAuth(req)
+  if (auth instanceof NextResponse) return auth
+
+  if (auth.role !== 'admin') {
+    // Don't disclose whether the role exists vs. the user not being
+    // authenticated — same 403 either way to prevent role enumeration.
+    return NextResponse.json(
+      { error: 'Acceso restringido a administradores' },
+      { status: 403 }
+    )
+  }
+  return { userId: auth.userId, role: 'admin' }
 }
