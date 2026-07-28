@@ -48,9 +48,13 @@ interface DashboardSummary {
 
 export function DashboardOverview({
   onNavigate,
+  onJumpToAudit,
 }: {
   /** Lets the dashboard cards deep-link to the right tab+filter. */
   onNavigate: (tab: 'vendors' | 'clients', filter: 'all' | 'true' | 'false') => void
+  /** Tier 8: click on a recent-activity row → audit log filtered by
+   *  that row's action. */
+  onJumpToAudit: (action: string) => void
 }) {
   const [data, setData] = useState<DashboardSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -182,24 +186,33 @@ export function DashboardOverview({
             )}
             <ul className="divide-y divide-slate-100">
               {data.recentActivity.map((a) => (
-                <li key={a.id} className="px-4 py-2.5 text-xs">
-                  <div className="flex justify-between items-baseline">
-                    <span className="font-mono text-slate-700">{a.action}</span>
-                    <span className="text-slate-400">
-                      {new Date(a.createdAt).toLocaleString('es-CO', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                  </div>
-                  <div className="text-slate-500 mt-0.5 truncate">
-                    por {a.adminEmail ?? a.adminId.slice(0, 8)}
-                    {a.targetType && a.targetId && (
-                      <> · {a.targetType}:{a.targetId.slice(0, 8)}…</>
-                    )}
-                  </div>
+                <li key={a.id}>
+                  <button
+                    type="button"
+                    onClick={() => onJumpToAudit(a.action)}
+                    className="w-full text-left px-4 py-2.5 text-xs hover:bg-blue-50 transition-colors group"
+                    title={`Ver todas las acciones "${a.action}" en la bitácora`}
+                  >
+                    <div className="flex justify-between items-baseline">
+                      <span className="font-mono text-slate-700 group-hover:text-blue-700">
+                        {a.action}
+                      </span>
+                      <span className="text-slate-400">
+                        {new Date(a.createdAt).toLocaleString('es-CO', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                    <div className="text-slate-500 mt-0.5 truncate">
+                      por {a.adminEmail ?? a.adminId.slice(0, 8)}
+                      {a.targetType && a.targetId && (
+                        <> · {a.targetType}:{a.targetId.slice(0, 8)}…</>
+                      )}
+                    </div>
+                  </button>
                 </li>
               ))}
             </ul>

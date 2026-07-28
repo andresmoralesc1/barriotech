@@ -111,6 +111,10 @@ export function AdminPanel() {
   const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | typeof ORDER_STATUSES[number]>('all')
   const [orderQuery, setOrderQuery] = useState('')
 
+  // Tier 8: dashboard recent-activity deep-links to the audit log with
+  // the action of the clicked row pre-filled in the filter.
+  const [auditInitialAction, setAuditInitialAction] = useState('')
+
   // Vendor batch selection — set of selected vendor ids.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchPending, setBatchPending] = useState(false)
@@ -271,6 +275,16 @@ export function AdminPanel() {
     },
     []
   )
+
+  /** Tier 8: dashboard recent-activity → audit-log deep-link. Jumps to
+   *  the audit tab with the clicked row's action pre-filled in the
+   *  filter so the operator lands on a narrowed result. */
+  const onJumpToAudit = useCallback((actionName: string) => {
+    setTab('audit')
+    localStorage.setItem('admin-tab', 'audit')
+    setAuditInitialAction(actionName)
+    setOffset(0)
+  }, [])
 
   /** CSV export — re-uses the same active/query filters the table shows,
    *  fetches the CSV endpoint with credentials, and triggers a browser
@@ -658,9 +672,9 @@ export function AdminPanel() {
           )}
 
           {tab === 'overview' ? (
-            <DashboardOverview onNavigate={onNavigate} />
+            <DashboardOverview onNavigate={onNavigate} onJumpToAudit={onJumpToAudit} />
           ) : tab === 'audit' ? (
-            <AuditLog />
+            <AuditLog key={auditInitialAction} initialAction={auditInitialAction} />
           ) : loading ? (
             <div className="p-12 text-center text-slate-500">Cargando…</div>
           ) : tab === 'vendors' ? (

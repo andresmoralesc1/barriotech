@@ -31,7 +31,7 @@ interface AuditEntry {
 
 const PAGE_SIZE = 50
 
-export function AuditLog() {
+export function AuditLog({ initialAction = '' }: { initialAction?: string } = {}) {
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
@@ -40,7 +40,7 @@ export function AuditLog() {
   const [error, setError] = useState<string | null>(null)
 
   // Filters
-  const [action, setAction] = useState('')
+  const [action, setAction] = useState(initialAction)
   const [targetType, setTargetType] = useState<'all' | 'user' | 'vendor'>('all')
   const [since, setSince] = useState('') // YYYY-MM-DD
   const [until, setUntil] = useState('')
