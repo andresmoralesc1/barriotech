@@ -18,8 +18,10 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { VendorDetailDrawer } from './vendor-detail-drawer'
 import { ClientDetailDrawer } from './client-detail-drawer'
+import { DashboardOverview } from './dashboard-overview'
+import { AuditLog } from './audit-log'
 
-type Tab = 'vendors' | 'clients'
+type Tab = 'overview' | 'vendors' | 'clients' | 'audit'
 
 interface AdminVendor {
   id: string
@@ -61,7 +63,7 @@ type BatchAction = 'activate' | 'deactivate' | 'verify_email'
 
 export function AdminPanel() {
   const router = useRouter()
-  const [tab, setTab] = useState<Tab>('vendors')
+  const [tab, setTab] = useState<Tab>('overview')
   const [vendors, setVendors] = useState<AdminVendor[]>([])
   const [vendorsTotal, setVendorsTotal] = useState(0)
   const [clients, setClients] = useState<AdminClient[]>([])
@@ -85,7 +87,14 @@ export function AdminPanel() {
   // Hydrate tab from localStorage
   useEffect(() => {
     const stored = localStorage.getItem('admin-tab')
-    if (stored === 'vendors' || stored === 'clients') setTab(stored)
+    if (
+      stored === 'overview' ||
+      stored === 'vendors' ||
+      stored === 'clients' ||
+      stored === 'audit'
+    ) {
+      setTab(stored)
+    }
   }, [])
 
   const fetchVendors = useCallback(async () => {
@@ -127,8 +136,20 @@ export function AdminPanel() {
   }, [activeFilter, query, offset])
 
   useEffect(() => {
-    if (tab === 'vendors') fetchVendors()
-    else fetchClients()
+    // Tab-driven fetches:
+    //   · vendors  → vendor list (offset/filter already in fetchVendors deps)
+    //   · clients  → client list
+    //   · overview → BOTH in parallel, so the tab badges show real counts
+    //                even if the user never clicks the table tabs
+    //   · audit    → component fetches its own data internally, skip here
+    if (tab === 'vendors') {
+      void fetchVendors()
+    } else if (tab === 'clients') {
+      void fetchClients()
+    } else if (tab === 'overview') {
+      void fetchVendors()
+      void fetchClients()
+    }
   }, [tab, fetchVendors, fetchClients])
 
   // Reset selection AND page when the filter context changes. Resetting
@@ -144,6 +165,53 @@ export function AdminPanel() {
     setTab(next)
     localStorage.setItem('admin-tab', next)
   }
+
+  /** Dashboard deep-link handler: jumps to the vendors/clients tab with
+   *  the matching active-filter chip selected. */
+  const onNavigate = useCallback(
+    (nextTab: 'vendors' | 'clients', filter: 'all' | 'true' | 'false') => {
+      setTab(nextTab)
+      localStorage.setItem('admin-tab', nextTab)
+      setActiveFilter(filter)
+      setOffset(0)
+      setSelectedIds(new Set())
+    },
+    []
+  )
+
+  /** CSV export — re-uses the same active/query filters the table shows,
+   *  fetches the CSV endpoint with credentials, and triggers a browser
+   *  download via a temporary object URL. Filename comes from the
+   *  server's Content-Disposition so it stays consistent with what the
+   *  endpoint emits. */
+  const onExportCsv = useCallback(async () => {
+    if (tab !== 'vendors' && tab !== 'clients') return
+    const params = new URLSearchParams()
+    if (activeFilter !== 'all') params.set('active', activeFilter)
+    if (query.trim()) params.set('q', query.trim())
+    const url = `/api/admin/${tab}/export?${params.toString()}`
+    try {
+      const res = await fetch(url, { credentials: 'include' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error ?? `Export error: HTTP ${res.status}`)
+        return
+      }
+      const blob = await res.blob()
+      const disposition = res.headers.get('Content-Disposition') ?? ''
+      const m = disposition.match(/filename="?([^";]+)"?/)
+      const filename = m ? m[1] : `${tab}-export.csv`
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(a.href)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error')
+    }
+  }, [tab, activeFilter, query])
 
   const onVendorAction = async (id: string, body: { isActive?: boolean; emailVerified?: boolean }) => {
     const res = await fetch(`/api/admin/vendors/${id}`, {
@@ -253,7 +321,10 @@ export function AdminPanel() {
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="bg-white rounded-lg border border-slate-200">
           <div className="border-b border-slate-200 px-4">
-            <nav className="flex gap-1">
+            <nav className="flex gap-1 overflow-x-auto">
+              <TabButton active={tab === 'overview'} onClick={() => onTabChange('overview')}>
+                Resumen
+              </TabButton>
               <TabButton active={tab === 'vendors'} onClick={() => onTabChange('vendors')}>
                 Vendedores
                 <span className="ml-2 text-xs text-slate-500">({vendorsTotal})</span>
@@ -262,33 +333,55 @@ export function AdminPanel() {
                 Clientes
                 <span className="ml-2 text-xs text-slate-500">({clientsTotal})</span>
               </TabButton>
+              <TabButton active={tab === 'audit'} onClick={() => onTabChange('audit')}>
+                Auditoría
+              </TabButton>
             </nav>
           </div>
 
-          <div className="p-4 border-b border-slate-200 flex gap-3 items-center">
-            <input
-              type="search"
-              placeholder={tab === 'vendors' ? 'Buscar por nombre…' : 'Buscar por nombre o email…'}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="flex-1 px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <select
-              value={activeFilter}
-              onChange={(e) => setActiveFilter(e.target.value as 'all' | 'true' | 'false')}
-              className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">Todos</option>
-              <option value="true">Activos</option>
-              <option value="false">Inactivos</option>
-            </select>
-          </div>
+          {/* Toolbar — only shown on the table-driven tabs (vendors/clients) */}
+          {(tab === 'vendors' || tab === 'clients') && (
+            <div className="p-4 border-b border-slate-200 flex gap-3 items-center flex-wrap">
+              <input
+                type="search"
+                placeholder={
+                  tab === 'vendors' ? 'Buscar por nombre…' : 'Buscar por nombre o email…'
+                }
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="flex-1 min-w-[180px] px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <select
+                value={activeFilter}
+                onChange={(e) => setActiveFilter(e.target.value as 'all' | 'true' | 'false')}
+                className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">Todos</option>
+                <option value="true">Activos</option>
+                <option value="false">Inactivos</option>
+              </select>
+              {/* Export button hits the export endpoint with the same
+                  filters currently applied to the table. */}
+              <button
+                type="button"
+                onClick={onExportCsv}
+                className="inline-flex items-center gap-1 px-3 py-2 border border-slate-300 rounded text-sm text-slate-700 hover:bg-slate-50 hover:border-slate-400"
+                title="Descarga los mismos filtros que ves en la tabla"
+              >
+                <span aria-hidden="true">⬇</span> Exportar CSV
+              </button>
+            </div>
+          )}
 
           {error && (
             <div className="p-4 bg-red-50 text-red-700 text-sm border-b border-red-200">{error}</div>
           )}
 
-          {loading ? (
+          {tab === 'overview' ? (
+            <DashboardOverview onNavigate={onNavigate} />
+          ) : tab === 'audit' ? (
+            <AuditLog />
+          ) : loading ? (
             <div className="p-12 text-center text-slate-500">Cargando…</div>
           ) : tab === 'vendors' ? (
             <>
