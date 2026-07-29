@@ -16,7 +16,7 @@ import pool from '@/lib/db'
  *   corresponding routes exist.
  */
 
-const BASE = 'https://gps.andresmorales.com.co'
+const BASE = 'https://barriotech.com.co'
 
 // Flip to true the day [locale] routing lands. Until then, emitting hreflang
 // for non-existent URLs is an SEO sin (Search Console "alternates have errors").

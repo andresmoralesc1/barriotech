@@ -42,9 +42,18 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'andresmorales.com.co',
       },
+      // Tier 14: barriotech.com.co + www variant. Both serve the same
+      // Next.js instance behind Caddy; listed separately so /next/image
+      // can optimize OG previews shared from either. www is the canonical
+      // redirect target, so this is rarely used in practice but listed
+      // for robustness.
       {
         protocol: 'https',
-        hostname: 'gps.andresmorales.com.co',
+        hostname: 'barriotech.com.co',
+      },
+      {
+        protocol: 'https',
+        hostname: 'www.barriotech.com.co',
       },
     ],
   },
@@ -68,7 +77,7 @@ const nextConfig = {
 
     const csp = [
       `default-src 'self'`,
-      // sync with /etc/caddy/Caddyfile line 24 (gps.andresmorales.com.co block).
+      // sync with /etc/caddy/Caddyfile line 24 (barriotech.com.co block).
       // Caddy overwrites this header in production via header_down, so next.config.js
       // is only authoritative in dev/preview. Keep them in lock-step.
       // S1-SEC-4 (audit 2026-07-22): removed 'unsafe-eval'. Next.js 16 in

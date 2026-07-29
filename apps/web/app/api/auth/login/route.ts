@@ -212,7 +212,7 @@ export async function POST(req: NextRequest) {
       // S3-SEC-3 (audit 2026-07-23): changed SameSite from 'lax' to 'strict'.
       // Lax allowed the auth cookies to ride along on top-level cross-site
       // GET navigations (e.g. clicking a phishing link in email that 302's
-      // to gps.andresmorales.com.co). Strict drops the cookies on ANY
+      // to barriotech.com.co). Strict drops the cookies on ANY
       // cross-site request, including GET. The tradeoff: if we add OAuth
       // (Google/Facebook) later, the OAuth callback POST won't include the
       // session cookie — we'd need to either downgrade the relevant cookies
@@ -230,7 +230,7 @@ export async function POST(req: NextRequest) {
       // S3-SEC-3 (audit 2026-07-23): changed SameSite from 'lax' to 'strict'.
       // Lax allowed the auth cookies to ride along on top-level cross-site
       // GET navigations (e.g. clicking a phishing link in email that 302's
-      // to gps.andresmorales.com.co). Strict drops the cookies on ANY
+      // to barriotech.com.co). Strict drops the cookies on ANY
       // cross-site request, including GET. The tradeoff: if we add OAuth
       // (Google/Facebook) later, the OAuth callback POST won't include the
       // session cookie — we'd need to either downgrade the relevant cookies

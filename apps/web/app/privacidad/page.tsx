@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description:
     'Política de Tratamiento de Datos Personales de BarrioTech conforme a la Ley 1581 de 2012 de Colombia. Cómo recopilamos, usamos y protegemos tu información.',
   alternates: {
-    canonical: 'https://gps.andresmorales.com.co/privacidad',
+    canonical: 'https://barriotech.com.co/privacidad',
   },
   robots: {
     index: true,

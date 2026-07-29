@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description:
     '¿Tienes preguntas o sugerencias sobre BarrioTech? Escríbenos y te responderemos lo antes posible por correo electrónico, teléfono o mediante el formulario en línea.',
   alternates: {
-    canonical: 'https://gps.andresmorales.com.co/contacto',
+    canonical: 'https://barriotech.com.co/contacto',
   },
 }
 

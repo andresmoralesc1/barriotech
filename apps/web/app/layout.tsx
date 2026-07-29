@@ -9,7 +9,7 @@ import { SellerOnboardingBanner } from '@/components/SellerOnboardingBanner'
 import './globals.css'
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://gps.andresmorales.com.co'),
+  metadataBase: new URL('https://barriotech.com.co'),
   title: {
     default: 'BarrioTech — Vendedores informales en tu barrio, en tiempo real',
     template: '%s',
@@ -85,8 +85,8 @@ export default function RootLayout({
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: 'BarrioTech',
-    url: 'https://gps.andresmorales.com.co',
-    logo: 'https://gps.andresmorales.com.co/logo.png',
+    url: 'https://barriotech.com.co',
+    logo: 'https://barriotech.com.co/logo.png',
     description:
       'Plataforma para conectar compradores con vendedores informales en Colombia.',
     sameAs: [
@@ -97,7 +97,7 @@ export default function RootLayout({
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: 'BarrioTech',
-    url: 'https://gps.andresmorales.com.co',
+    url: 'https://barriotech.com.co',
     inLanguage: 'es-CO',
     // SearchAction enables the Google sitelinks search box for our brand.
     // Even without an internal search engine, declaring a target that's
@@ -107,7 +107,7 @@ export default function RootLayout({
       '@type': 'SearchAction',
       target: {
         '@type': 'EntryPoint',
-        urlTemplate: 'https://gps.andresmorales.com.co/map?city={search_term_string}',
+        urlTemplate: 'https://barriotech.com.co/map?city={search_term_string}',
       },
       // Query-input intent for the placeholder text Google shows.
       'query-input': 'required name=search_term_string',

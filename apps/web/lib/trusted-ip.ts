@@ -158,7 +158,7 @@ function matchesTrusted(target: Uint8Array, ranges: ReturnType<typeof getTrusted
  * trusted. For Next 16 on Node the socket IP is the only direct value
  * we can rely on; in production behind Caddy, that's `127.0.0.1`.
  *
- * Caddy is configured (Caddyfile gps.andresmorales.com.co block) to
+ * Caddy is configured (Caddyfile barriotech.com.co block) to
  * forward `X-Real-IP {remote_host}` + `X-Forwarded-For {remote_host}`
  * to the upstream. So the socket is always 127.0.0.1 and we don't
  * need to inspect it — we trust those headers. */

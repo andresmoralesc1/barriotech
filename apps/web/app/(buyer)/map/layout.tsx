@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     title: 'BarrioTech — Mapa de vendedores en vivo',
     description:
       'Vendedores informales activos cerca de ti, en tiempo real. Comida, frutas, artesanías.',
-    url: 'https://gps.andresmorales.com.co/map',
+    url: 'https://barriotech.com.co/map',
     images: [
       { url: '/hero.jpg', width: 1200, height: 630, alt: 'Mapa de vendedores BarrioTech' },
     ],

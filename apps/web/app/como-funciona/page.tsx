@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description:
     'Aprende cómo BarrioTech conecta compradores con vendedores informales en Colombia. Mapa en tiempo real, favoritos, reseñas y sin comisiones.',
   alternates: {
-    canonical: 'https://gps.andresmorales.com.co/como-funciona',
+    canonical: 'https://barriotech.com.co/como-funciona',
   },
 }
 

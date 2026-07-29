@@ -33,7 +33,7 @@ export function PrivacidadView() {
             <p className="text-gray-600 mb-3">
               BarrioTech, en adelante <strong>la Plataforma</strong>, actúa como
               Responsable del Tratamiento de los datos personales recolectados a
-              través del sitio web <code>gps.andresmorales.com.co</code> y la
+              través del sitio web <code>barriotech.com.co</code> y la
               aplicación móvil (cuando esté disponible), conforme a la{' '}
               <strong>Ley 1581 de 2012</strong> y el{' '}
               <strong>Decreto 1377 de 2013</strong> de Colombia.

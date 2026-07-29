@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description:
     'BarrioTech conecta compradores con vendedores locales en Colombia. Conoce nuestra misión, valores y equipo.',
   alternates: {
-    canonical: 'https://gps.andresmorales.com.co/nosotros',
+    canonical: 'https://barriotech.com.co/nosotros',
   },
   openGraph: {
     title: 'Nosotros — BarrioTech',

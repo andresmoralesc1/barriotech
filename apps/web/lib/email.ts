@@ -27,11 +27,14 @@ function getApiKey(): string | null {
 }
 
 function getFromAddress(): { email: string; name: string } {
-  // Default to no-reply@ so Brevo rejects anything that tries to forge a
-  // reply (the address is a mailbox that doesn't accept inbound). Operators
-  // can override via EMAIL_FROM, but only if they also configure a matching
-  // SPF/DKIM record on the new domain.
-  const email = process.env.EMAIL_FROM || 'no-reply@andresmorales.com.co'
+  // Default to no-reply@barriotech.com.co. Brevo will reject anything
+  // that tries to forge a sender it can't verify (SPF/DKIM records at
+  // the registrar). Tier 14: this domain MUST be verified in Brevo +
+  // the registrar before flipping EMAIL_FROM off the example default.
+  // The fallback below keeps the code path crash-safe if EMAIL_FROM is
+  // ever unset (e.g. a misconfigured PM2 env) but it's never reachable
+  // when the deployed .env has the line populated.
+  const email = process.env.EMAIL_FROM || 'no-reply@barriotech.com.co'
   const name = process.env.EMAIL_FROM_NAME || 'BarrioTech'
   return { email, name }
 }
@@ -39,7 +42,7 @@ function getFromAddress(): { email: string; name: string } {
 function getAppUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL
     || process.env.PUBLIC_URL
-    || 'https://gps.andresmorales.com.co'
+    || 'https://barriotech.com.co'
 }
 
 interface SendArgs {

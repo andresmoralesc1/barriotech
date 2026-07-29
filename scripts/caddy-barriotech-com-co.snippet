@@ -1,0 +1,47 @@
+# BarrioTech (Tier 14)
+# Primary brand domain replaces gps.andresmorales.com.co. Same Next.js
+# instance on the same backend (:3005). Storage + headers + caching
+# mirror the gps.andresmorales.com.co block above — see /etc/caddy/Caddyfile
+# lines 1-41 for the original pattern.
+#
+# To enable:
+#   1. Add this block to /etc/caddy/Caddyfile (any position; order
+#      doesn't matter between vhosts but keep new code on top for
+#      readability).
+#   2. sudo systemctl reload caddy       # pick up the new vhost
+#   3. sudo caddy validate --config /etc/caddy/Caddyfile   # sanity check
+#
+# DNS prerequisite (Hostinger):
+#   A     barriotech.com.co       → <this-server-public-ip>
+#   A     www.barriotech.com.co   → <this-server-public-ip>
+#   (or CNAME www → barriotech.com.co if your registrar supports it)
+#
+# Let's Encrypt certs are auto-issued by Caddy the moment the A records
+# resolve. The very first request may take 30-60s for cert provisioning;
+# thereafter it's transparent. /etc/caddy/acme/ holds the issued certs.
+barriotech.com.co, www.barriotech.com.co {
+	# Mirror gps.andresmorales.com.co security headers verbatim. CSP
+	# assumes Umami self-hosted analytics on the legacy andresmorales
+	# parent host; that doesn't change with this rename.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(self), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), interest-cohort=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://umami.andresmorales.com.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://fonts.googleapis.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		-X-Powered-By
+	}
+
+	# /storage/* — same Next.js writeable storage mount as the gps vhost.
+	# MUST be declared BEFORE reverse_proxy so it matches first.
+	handle /storage/* {
+		root * /home/telchar/gps-street-sellers/apps/web
+		file_server
+	}
+
+	reverse_proxy 127.0.0.1:3005 {
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+	}
+}

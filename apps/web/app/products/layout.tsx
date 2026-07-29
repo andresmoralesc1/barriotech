@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'BarrioTech — Productos',
     description: 'Gestiona el catálogo de productos de tu tienda.',
-    url: 'https://gps.andresmorales.com.co/products',
+    url: 'https://barriotech.com.co/products',
   },
 }
 

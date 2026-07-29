@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description:
     'BarrioTech desarrolla una plataforma de geolocalización y promoción para vendedores de calle. Conoce el MVP, el modelo de negocio y la oportunidad de mercado.',
   alternates: {
-    canonical: 'https://gps.andresmorales.com.co/inversionistas',
+    canonical: 'https://barriotech.com.co/inversionistas',
   },
   robots: {
     index: true,

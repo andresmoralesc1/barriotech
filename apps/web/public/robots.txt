@@ -14,4 +14,4 @@ Disallow: /notifications
 Disallow: /profile/
 
 # Sitemap
-Sitemap: https://gps.andresmorales.com.co/sitemap.xml
+Sitemap: https://barriotech.com.co/sitemap.xml

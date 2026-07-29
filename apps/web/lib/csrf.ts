@@ -69,7 +69,7 @@ export function getAppOrigin(): string {
   // misconfiguration immediately during deploy.
   if (process.env.NODE_ENV === 'production') {
     throw new Error(
-      '[CSRF] No APP_ORIGIN configured. Set APP_ORIGIN=https://gps.andresmorales.com.co in prod.',
+      '[CSRF] No APP_ORIGIN configured. Set APP_ORIGIN=https://barriotech.com.co in prod.',
     )
   }
   // Dev/test fallback, intentionally permissive to match `next start` default.

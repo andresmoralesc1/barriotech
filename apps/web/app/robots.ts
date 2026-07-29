@@ -36,7 +36,7 @@ export default function robots(): MetadataRoute.Robots {
         allow: ['/storage/', '/'],
       },
     ],
-    sitemap: 'https://gps.andresmorales.com.co/sitemap.xml',
-    host: 'https://gps.andresmorales.com.co',
+    sitemap: 'https://barriotech.com.co/sitemap.xml',
+    host: 'https://barriotech.com.co',
   }
 }

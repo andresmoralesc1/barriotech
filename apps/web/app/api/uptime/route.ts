@@ -17,7 +17,7 @@
  *
  * Configure in UptimeRobot as:
  *   type: HTTP (s)
- *   url:  https://gps.andresmorales.com.co/api/uptime
+ *   url:  https://barriotech.com.co/api/uptime
  *   interval: 5min  (free tier minimum)
  */
 

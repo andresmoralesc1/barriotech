@@ -51,8 +51,12 @@ module.exports = {
         PORT: '3005',
         // Must match the public site Origin. If this stays at localhost,
         // requireSameOrigin() 403s every upload / profile PATCH from
-        // https://gps.andresmorales.com.co (browsers send that Origin).
-        APP_ORIGIN: 'https://gps.andresmorales.com.co',
+        // https://barriotech.com.co (browsers send that Origin).
+        // Tier 14: barriotech.com.co is now the primary brand; the old
+        // gps.andresmorales.com.co subdomain still responds on :3005 but
+        // its Origin header won't match, which 403s the request —
+        // acceptable for the transition window.
+        APP_ORIGIN: 'https://barriotech.com.co',
       },
       // Out-of-band log files. pm2-logrotate watches these and rotates when
       // either exceeds 50M. We keep 10 compressed copies.
