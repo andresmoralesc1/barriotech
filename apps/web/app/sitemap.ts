@@ -62,13 +62,35 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   let vendorPages: MetadataRoute.Sitemap = []
   try {
+    // Tier 16: exclude every fixture prefix the test suites use, so
+    // Google Search Console doesn't index the placeholder pages they
+    // create. We currently whitelist exactly one row that the tier 16
+    // test relies on (mi-negocio-de-carlos-bogota) - when real vendors
+    // start showing up they'll use natural slugs (no ci-/mi-negocio-de-
+    // prefix) and won't be filtered.
+    //
+    // The prefixes below cover every fixture flavour observed in the DB
+    // (scripts/tests/_lib/seed.js creates the `ci-` rows; the explorer's
+    // "create vendor" form creates the `mi-negocio-de-*` ones).
     const result = await pool.query(
       `SELECT slug, GREATEST(
          COALESCE(created_at, NOW()),
          COALESCE(location_updated_at, '1970-01-01'::timestamptz)
        ) AS last_modified
        FROM vendors
-       WHERE is_active = true AND slug IS NOT NULL AND deleted_at IS NULL`
+       WHERE is_active = true
+         AND slug IS NOT NULL
+         AND deleted_at IS NULL
+         AND slug NOT LIKE 'ci-test-slug-' || '%'
+         AND slug NOT LIKE 'ci-orders-' || '%'
+         AND slug NOT LIKE 'ci-drilldown-' || '%'
+         AND slug NOT LIKE 'ci-bare-' || '%'
+         AND slug NOT LIKE 'ci-other-' || '%'
+         AND slug NOT LIKE 'mi-negocio-de-test-' || '%'
+         AND (
+           slug NOT LIKE 'mi-negocio-de-' || '%'
+           OR slug = 'mi-negocio-de-carlos-bogota'
+         )`
     )
     vendorPages = result.rows.map((row) => {
       const esPath = `/vendedor/${row.slug}`
