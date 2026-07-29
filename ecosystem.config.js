@@ -44,8 +44,11 @@ module.exports = {
       kill_timeout: 8000,
       wait_ready: false,
       // Load .env explicitly so the port and secrets are present at process start.
-      // We only need the file; Next.js itself reads .env.local with higher priority
-      // inside the app, so we don't override anything here.
+      // Next.js itself would also load .env at runtime, but only for vars that
+      // are NOT already in process.env — and pm2 currently has stale BREVO_API_KEY
+      // / EMAIL_FROM saved from before. Reading the file at process spawn ensures
+      // the live values in apps/web/.env always win on a fresh restart.
+      env_file: '/home/telchar/gps-street-sellers/apps/web/.env',
       env: {
         NODE_ENV: 'production',
         PORT: '3005',
