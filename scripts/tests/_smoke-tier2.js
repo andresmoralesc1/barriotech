@@ -131,7 +131,7 @@ async function step3_createVendor() {
     check('register seller 200', reg.status === 200, `got ${reg.status} ${JSON.stringify(reg.body)}`)
 
     // Reset rate limit so login doesn't 429
-    await c.query("DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'register')")
+    await c.query("DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'login_account', 'register')")
 
     const profileRes = await c.query(`SELECT id FROM profiles WHERE email = $1 LIMIT 1`, [VENDOR_OWNER_EMAIL])
     const profileId = profileRes.rows[0]?.id

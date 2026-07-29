@@ -73,11 +73,38 @@ async function withClient(fn) {
   }
 }
 
-async function resetRateLimit() {
+// All auth-related rate-limit buckets used by /api/auth/* endpoints.
+// Keep this list in sync with apps/web/lib/rate-limit and the bucket
+// names referenced in apps/web/app/api/auth/*/route.ts.
+//
+// 2026-07-29: added 'login_account' — the per-identifier bucket added
+// in the S1-SEC-1 audit. Tests that probe /api/auth/login with bad
+// credentials (identifier='x', password='x') burn BOTH the IP bucket
+// ('login', 10/15min) AND the per-identifier bucket ('login_account',
+// 5/15min). Without clearing 'login_account' here, the second probe
+// for the same identifier returns 429 instead of the expected 401/400.
+// Live confirmation: SELECT bucket, ip, COUNT(*) FROM rate_limit_attempts
+// WHERE bucket='login_account' GROUP BY 1,2 shows 'x' at 38 attempts
+// after a few test runs.
+const AUTH_RATE_LIMIT_BUCKETS = [
+  'login',
+  'login_account',
+  'register',
+  'forgot_password',
+  'reset_password',
+  'resend_verification',
+  'resend_verification_email',
+  'verify_email',
+]
+
+async function resetRateLimit(buckets = AUTH_RATE_LIMIT_BUCKETS) {
   try {
     await withClient(async (c) => {
+      // Use = ANY($1) so the bucket list lives in one place and
+      // we never duplicate the IN clause across files.
       await c.query(
-        `DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'register')`
+        `DELETE FROM rate_limit_attempts WHERE bucket = ANY($1::text[])`,
+        [buckets]
       )
     })
   } catch {

@@ -79,7 +79,8 @@ async function createAdmin() {
 async function loginAdmin(email) {
   const c = await dbClient()
   try {
-    await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'register')`)
+    // Include 'login_account' — the per-identifier bucket added in S1-SEC-1.
+    await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'login_account', 'register')`)
   } finally { await c.end() }
 
   const res = await fetchJSON('/api/auth/login', {

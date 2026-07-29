@@ -90,9 +90,12 @@ async function step1_createAdmin() {
 async function step2_loginAdmin() {
   console.log('\n[2] Login as admin')
   // Reset login rate limit (no shared state with the test, but cheap).
+  // Note: include 'login_account' — the per-identifier bucket added in
+  // the S1-SEC-1 audit. Without it, a smoke run after multiple failed
+  // admin logins returns 429 instead of the expected 401.
   const c = await dbClient()
   try {
-    await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'register')`)
+    await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'login_account', 'register')`)
   } finally { await c.end() }
 
   const res = await fetchJSON('/api/auth/login', {
@@ -131,9 +134,10 @@ async function step3_registerBuyers() {
     buyerIds.push(reg.body?.user?.id)
   }
   // Reset rate limit so the login calls (none here, but defensive) don't 429.
+  // Include 'login_account' — see step2_loginAdmin.
   const c = await dbClient()
   try {
-    await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'register')`)
+    await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'login_account', 'register')`)
     await c.query(`DELETE FROM rate_limit_attempts WHERE bucket = 'admin_client_batch'`)
   } finally { await c.end() }
 }

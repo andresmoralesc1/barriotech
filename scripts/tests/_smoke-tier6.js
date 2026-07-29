@@ -104,7 +104,8 @@ async function createBuyer() {
 
 async function loginAdmin(email) {
   const c = await dbClient()
-  try { await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'register')`) } finally { await c.end() }
+  // Include 'login_account' — the per-identifier bucket added in S1-SEC-1.
+  try { await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'login_account', 'register')`) } finally { await c.end() }
   const res = await fetchJSON('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -118,7 +119,8 @@ async function loginAdmin(email) {
 
 async function loginBuyer(email) {
   const c = await dbClient()
-  try { await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'register')`) } finally { await c.end() }
+  // Include 'login_account' — the per-identifier bucket added in S1-SEC-1.
+  try { await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'login_account', 'register')`) } finally { await c.end() }
   const res = await fetchJSON('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

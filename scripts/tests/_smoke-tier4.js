@@ -101,7 +101,7 @@ async function step2_loginAdmin() {
   console.log('\n[2] Login as admin')
   const c = await dbClient()
   try {
-    await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'register')`)
+    await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'login_account', 'register')`)
   } finally { await c.end() }
 
   const res = await fetchJSON('/api/auth/login', {
@@ -268,7 +268,7 @@ async function step11_buyerForbidden() {
   // Login as buyer[0]
   const c = await dbClient()
   try {
-    await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'register')`)
+    await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'login_account', 'register')`)
   } finally { await c.end() }
   const login = await fetchJSON('/api/auth/login', {
     method: 'POST',

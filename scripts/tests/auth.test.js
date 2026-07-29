@@ -8,7 +8,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const { loadEnv, getBase } = require('./_lib/env-loader')
-const { setupTestUser, wipeCiTestRows } = require('./_lib/seed')
+const { setupTestUser, wipeCiTestRows, resetRateLimit } = require('./_lib/seed')
 
 loadEnv()
 
@@ -19,26 +19,10 @@ test('setup: wipe any leftover ci-test-* rows from previous runs', async () => {
   await wipeCiTestRows()
 })
 
-// Reset rate limit so tests aren't blocked by prior runs.
-// Each test run starts fresh — useful when iterating locally.
-async function resetRateLimit() {
-  const { Client } = require('pg')
-  const c = new Client({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432'),
-    database: process.env.DB_NAME || 'gps_street_sellers',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-  })
-  try {
-    await c.connect()
-    await c.query("DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'register')")
-  } catch (e) {
-    // table might not exist yet — non-fatal
-  } finally {
-    await c.end()
-  }
-}
+// resetRateLimit() is imported from _lib/seed.js — single source of
+// truth for the bucket list. As of 2026-07-29 it clears all auth
+// buckets including login_account (the per-identifier bucket that
+// C.2 tests were tripping on — see the doc comment in seed.js).
 
 // Compile the TS file to JS via require hook (use tsx or pre-compile?)
 // For simplicity we test via the running Next.js endpoint — see test file #2.
@@ -529,16 +513,12 @@ test('Sprint 7 B-AUTH-3: POST /api/auth/refresh does NOT require Origin header',
 
 // --- Sprint 9 C.2: request id correlation tests ---------------------
 
-// The login bucket is 5/min/IP. The x-request-id tests below each
-// trigger a /api/auth/login (the endpoint that exercises request-id
-// plumbing on the 401 path). Earlier tests in this file may have
-// already burned the bucket, and previous test runs in the same
-// 15-minute window stack on top. Each test resets the bucket before
-// probing so the assertion targets the 401, not a 429.
-async function clearLoginBucket() { await resetRateLimit() }
-
+// Both buckets (/api/auth/login has an IP-based 'login' bucket AND a
+// per-identifier 'login_account' bucket) must be cleared before each
+// probe so the assertion targets the 401, not a 429. resetRateLimit()
+// from _lib/seed.js clears all auth buckets in one shot.
 test('Sprint 9 C.2: response includes x-request-id header (generated when client omits it)', async () => {
-  await clearLoginBucket()
+  await resetRateLimit()
 
   const res = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST',
@@ -619,6 +599,60 @@ test('Sprint 9 C.2: x-request-id too long (>64 chars) is dropped and a fresh UUI
   assert.notEqual(echoed, tooLong,
     'over-long x-request-id must NOT be echoed')
   assert.match(echoed, /^[0-9a-f-]{36}$/i, 'a fresh UUID should be generated instead')
+})
+
+// --- Bucket coverage regression: resetRateLimit must clear login_account -----
+
+test('resetRateLimit() clears the login_account bucket (per-identifier rate limit)', async () => {
+  // Regression for the 2026-07-29 audit finding: resetRateLimit() in
+  // _lib/seed.js used to only clear ('login', 'register'). After the
+  // S1-SEC-1 audit added a per-identifier 'login_account' bucket to
+  // /api/auth/login, tests that probe the login endpoint with bad
+  // credentials started returning 429 instead of the expected 401/400.
+  //
+  // This test seeds a row directly into rate_limit_attempts with bucket
+  // = 'login_account', calls resetRateLimit(), and asserts the row is
+  // gone. If a future refactor drops 'login_account' from the bucket
+  // list in _lib/seed.js, this test will fail with a clear message
+  // pointing back at this comment.
+  const { Client } = require('pg')
+  const c = new Client({
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432'),
+    database: process.env.DB_NAME || 'gps_street_sellers',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || 'postgres',
+  })
+  await c.connect()
+  try {
+    // Pick a unique IP key so we don't collide with concurrent test runs.
+    const fakeIp = `reset-rl-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    await c.query(
+      `INSERT INTO rate_limit_attempts (bucket, ip, attempted_at)
+       VALUES ('login_account', $1, NOW())`,
+      [fakeIp]
+    )
+    // Sanity: the row exists pre-reset.
+    const before = await c.query(
+      `SELECT COUNT(*)::int AS cnt FROM rate_limit_attempts
+       WHERE bucket = 'login_account' AND ip = $1`,
+      [fakeIp]
+    )
+    assert.equal(before.rows[0].cnt, 1, 'seed row should exist before reset')
+
+    await resetRateLimit()
+
+    const after = await c.query(
+      `SELECT COUNT(*)::int AS cnt FROM rate_limit_attempts
+       WHERE bucket = 'login_account' AND ip = $1`,
+      [fakeIp]
+    )
+    assert.equal(after.rows[0].cnt, 0,
+      'resetRateLimit() must clear the login_account bucket — ' +
+      'see scripts/tests/_lib/seed.js AUTH_RATE_LIMIT_BUCKETS')
+  } finally {
+    await c.end()
+  }
 })
 
 // --- Sprint 10 C.3: Sentry integration tests ---------------------

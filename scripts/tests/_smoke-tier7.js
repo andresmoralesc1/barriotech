@@ -98,7 +98,7 @@ async function main() {
   {
     const c = await dbClient()
     try {
-      await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'register', 'admin_export_audit')`)
+      await c.query(`DELETE FROM rate_limit_attempts WHERE bucket IN ('login', 'login_account', 'register', 'admin_export_audit')`)
       await c.query(`DELETE FROM admin_audit_log WHERE admin_id = $1`, [adminId])
     } finally { await c.end() }
     ok('2. rate limit + audit log cleared')
