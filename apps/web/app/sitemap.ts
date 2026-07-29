@@ -72,6 +72,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // The prefixes below cover every fixture flavour observed in the DB
     // (scripts/tests/_lib/seed.js creates the `ci-` rows; the explorer's
     // "create vendor" form creates the `mi-negocio-de-*` ones).
+    //
+    // Tier 19-prep: ci-tier11-/ci-tier12- were leaking. The vendors
+    // smoke + seo suites (Tier 11 + 12) generate these slugs without
+    // is_active=false cleanup, so they showed up live in the sitemap
+    // and would have been indexed by GSC. Adding the exclusion now so
+    // GSC stops seeing fixture URLs.
     const result = await pool.query(
       `SELECT slug, GREATEST(
          COALESCE(created_at, NOW()),
@@ -86,6 +92,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
          AND slug NOT LIKE 'ci-drilldown-' || '%'
          AND slug NOT LIKE 'ci-bare-' || '%'
          AND slug NOT LIKE 'ci-other-' || '%'
+         AND slug NOT LIKE 'ci-tier' || '%'
          AND slug NOT LIKE 'mi-negocio-de-test-' || '%'
          AND (
            slug NOT LIKE 'mi-negocio-de-' || '%'
