@@ -9,6 +9,10 @@ apps/web/tsconfig.tsbuildinfo
 data.db
 *.log
 backups/
+logs/
+# Keep only the bot helper script tracked; the registry holds Telegram file_ids
+# which become useless once the bot token rotates (file_ids are bot-scoped).
+!scripts/_tg_restore.py
 *.sql
 !migrations/*.sql
 *.sql.gz
