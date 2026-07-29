@@ -251,7 +251,14 @@ test('dashboard HTML — /admin renders without runtime errors', async () => {
   assert.equal(res.status, 200, `expected 200, got ${res.status}`)
   const html = await res.text()
   assert.doesNotMatch(html, /Application error/, 'no Next.js application error')
-  assert.ok(html.includes('admin-panel'), 'expected the admin module to be present')
+  // "AdminPanel" matches the RSC payload reference ($L23 = AdminPanel)
+  // emitted by /admin server component. Using a more specific marker than
+  // 'admin-panel' because the AdminPanel client component renders after
+  // hydration — its JSX never appears in the initial HTML. The RSC
+  // payload reference is the right boundary to assert: present means
+  // the server component loaded the client module, absent means the
+  // redirect-to-login chunk replaced it.
+  assert.ok(html.includes('AdminPanel'), 'expected the admin module to be present')
 })
 
 test('audit log adminId filter — invalid uuid is rejected (400) without crashing', async () => {

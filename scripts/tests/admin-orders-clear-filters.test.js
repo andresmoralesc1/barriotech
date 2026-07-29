@@ -103,7 +103,14 @@ test('1. /admin renders 200 with the new button state', async () => {
   // behind tab === 'orders' so we can't see the new button in the
   // SSR'd HTML. We verify the page didn't blow up.
   assert.doesNotMatch(html, /Application error/, 'no Next.js application error')
-  assert.ok(html.includes('admin-panel'), 'admin module loaded')
+  // "AdminPanel" matches the RSC payload reference emitted by /admin
+  // server component. Using a more specific marker than 'admin-panel'
+  // because the AdminPanel client component renders after hydration —
+  // its JSX never appears in initial HTML. The RSC payload reference
+  // is the right boundary to assert: present means the server
+  // component loaded the client module, absent means the
+  // redirect-to-login chunk replaced it.
+  assert.ok(html.includes('AdminPanel'), 'admin module loaded')
 })
 
 test('2. orders toolbar still works (no regression on filter wiring)', async () => {
