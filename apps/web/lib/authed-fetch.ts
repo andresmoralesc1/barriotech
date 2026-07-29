@@ -96,7 +96,19 @@ export async function authedFetch(
       return res
     }
 
-    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+    // Sprint 12 B-AUTH-5 (2026-07-29): only redirect to /login if the user
+    // was actually logged in before this 401. A first-time visitor with no
+    // cookies hits /api/auth/me as their very first auth-aware request and
+    // gets a clean 401 — that's NOT a session expiry, it's "you have no
+    // session, please log in if you want to". We must not bounce every
+    // public-page visitor to /login just because they opened the home page.
+    //
+    // The `useStore.user !== null` gate uses Zustand's getState() to read
+    // the current user without subscribing — this runs once per request,
+    // not on every render. If we have a hydrated store with a user and
+    // the API still 401s, it's a real session expiry.
+    const hadSession = !!useStore.getState().user
+    if (hadSession && typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
       window.location.href = '/login?expired=1'
     }
     return res
