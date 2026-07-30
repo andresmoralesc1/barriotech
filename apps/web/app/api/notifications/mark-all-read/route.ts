@@ -3,6 +3,7 @@ import { logger, serializeErr } from '@/lib/logger'
 import { requireAuth } from '@/lib/auth'
 import pool from '@/lib/db'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimitByUser } from '@/lib/rate-limit'
 
 /**
  * POST /api/notifications/mark-all-read
@@ -19,6 +20,14 @@ export async function POST(req: NextRequest) {
   const auth = await requireAuth(req)
   if (auth instanceof NextResponse) return auth
 
+  // Per-user rate limit. 10/min — bulk mark-read is rare; bots would burst.
+  const rl = await checkRateLimitByUser(req, 'mark_all_read', 10, 60_000)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+    )
+  }
   try {
     // user_id on notifications is the profile id, not users.id. The owner
     // check resolves users.id → profiles.id in the WHERE.

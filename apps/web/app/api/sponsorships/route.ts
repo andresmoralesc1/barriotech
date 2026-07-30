@@ -3,6 +3,7 @@ import { logger, serializeErr } from '@/lib/logger'
 import pool from '@/lib/db'
 import { requireAuth, requireVerifiedEmail } from '@/lib/auth'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimitByUser } from '@/lib/rate-limit'
 
 /**
  * GET  /api/sponsorships          — list current user's sponsorships
@@ -80,6 +81,15 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     const csrf = requireSameOrigin(req); if (csrf) return csrf
+  // Per-user rate limit on sponsorship creation. 3/min — payments are expensive
+  // and bot-driven sponsorship creation could trigger real Wompi charges.
+  const rl = await checkRateLimitByUser(req, 'create_sponsorship', 3, 60_000)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+    )
+  }
   // CRIT-23: prod guard. Sponsorships are a paid flow that should NOT be
   // callable from preview/staging deployments where the same Stripe / payment
   // gateway credentials would otherwise create real charges. The check uses

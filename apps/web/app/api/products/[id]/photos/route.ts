@@ -3,6 +3,7 @@ import { logger, serializeErr } from '@/lib/logger'
 import { requireAuth, requireVerifiedEmail } from '@/lib/auth'
 import pool from '@/lib/db'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimitByUser } from '@/lib/rate-limit'
 
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -51,6 +52,18 @@ export async function POST(
     // product photo (creating new content). The dashboard banner promises
     // this gate.
     const auth = await requireVerifiedEmail(req)
+  if (auth instanceof NextResponse) return auth
+
+  // Per-user rate limit. 10/min — sellers rarely add 10+ photos/minute.
+  // /api/upload has the 20/hr cap on the binary itself; this caps the
+  // metadata row inserts which can also be abused.
+  const rl = await checkRateLimitByUser(req, 'add_product_photo', 10, 60_000)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+    )
+  }
     if (auth instanceof NextResponse) return auth
 
     // Verify ownership: product must belong to a vendor owned by this user.
