@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     await pool.query(
       `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, last_used_at)
        VALUES ($1, $2, $3, $4, NOW())
-       ON CONFLICT (user_id, endpoint) DO UPDATE
+       ON CONFLICT (endpoint) DO UPDATE
          SET p256dh = EXCLUDED.p256dh,
              auth = EXCLUDED.auth,
              last_used_at = NOW()`,
