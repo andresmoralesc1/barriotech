@@ -68,9 +68,9 @@ const config: Config = {
 
         // NEW — microinteractions batch (2026-07-21)
         'shimmer': 'shimmer 1.6s linear infinite',
-        'heart-pop': 'heartPop 0.45s cubic-bezier(0.34,1.56,0.64,1)',
+        'heart-pop': 'heartPop 0.45s cubic-bezier(0.16,1,0.3,1)',
         'cart-bounce': 'cartBounce 0.55s ease-out',
-        'badge-pop': 'badgePop 0.4s cubic-bezier(0.34,1.56,0.64,1)',
+        'badge-pop': 'badgePop 0.4s cubic-bezier(0.16,1,0.3,1)',
         'marker-pulse': 'markerPulse 1.4s ease-in-out infinite',
         'ripple': 'ripple 0.65s linear',
         'fly-out': 'flyOut 0.55s cubic-bezier(0.55,0.06,0.68,0.19) forwards',
@@ -80,11 +80,11 @@ const config: Config = {
 
         // FAB microinteractions — delayed entrance + idle pulse-ring
         // (subtle, ~6s interval) so the button feels alive without nagging.
-        'fab-pop-in': 'fabPopIn 0.45s cubic-bezier(0.34,1.56,0.64,1) 0.5s both',
+        'fab-pop-in': 'fabPopIn 0.45s cubic-bezier(0.16,1,0.3,1) 0.5s both',
         'fab-pulse-ring': 'fabPulseRing 2.4s cubic-bezier(0.4,0,0.6,1) infinite',
         // Stagger helper — applied via inline style `animationDelay` for
         // each action chip so they cascade in when the menu expands.
-        'fab-stagger-in': 'fabStaggerIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both',
+        'fab-stagger-in': 'fabStaggerIn 0.3s cubic-bezier(0.16,1,0.3,1) both',
       },
       keyframes: {
         fadeIn: {
