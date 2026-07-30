@@ -5,6 +5,7 @@ import pool from '@/lib/db'
 import { isUuid } from '@/lib/core/utils/slug'
 import { parseJsonBody } from '@/lib/parse-json'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimitByUser } from '@/lib/rate-limit'
 
 type RouteContext = {
   params: Promise<{ id: string }>
@@ -27,6 +28,16 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     // P1-1 (audit 2026-07-27): require verified email before editing a
     // product. The dashboard banner promises this gate.
     const auth = await requireVerifiedEmail(req)
+  if (auth instanceof NextResponse) return auth
+
+  // Per-user rate limit. 20/min — product edits are bursty but rate-bounded.
+  const rl = await checkRateLimitByUser(req, 'update_product', 20, 60_000)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+    )
+  }
     if (auth instanceof NextResponse) return auth
 
     // Verify ownership

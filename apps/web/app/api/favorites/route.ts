@@ -5,6 +5,7 @@ import { isUuid } from '@/lib/core/utils/slug'
 import { parseJsonBody } from '@/lib/parse-json'
 import pool from '@/lib/db'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimitFromRequest } from '@/lib/rate-limit'
 
 
 
@@ -12,6 +13,16 @@ import { requireSameOrigin } from '@/lib/csrf'
 // POST /api/favorites — add a vendor to favorites
 export async function POST(req: NextRequest) {
     const csrf = requireSameOrigin(req); if (csrf) return csrf
+  // Per-IP rate limit. Generous (60/min) because legitimate users add
+  // multiple favorites in a session; a spammer adds hundreds. Per-user
+  // would be more correct but requireAuth happens later in the flow.
+  const rl = await checkRateLimitFromRequest(req, 'create_favorite', 60, 60_000)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+    )
+  }
   try {
     // P1-1 (audit 2026-07-27): require verified email to add a
     // favorite (creating own data on the server).

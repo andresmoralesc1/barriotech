@@ -3,6 +3,7 @@ import { logger, serializeErr } from '@/lib/logger'
 import { requireAuth } from '@/lib/auth'
 import pool from '@/lib/db'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimitByUser } from '@/lib/rate-limit'
 
 /**
  * GET /api/vendors/[id]/business-hours — get vendor's business hours config.
@@ -53,7 +54,16 @@ export async function PUT(
 
   try {
     const auth = await requireAuth(req)
-if (auth instanceof NextResponse) return auth
+    if (auth instanceof NextResponse) return auth
+
+    // Per-user rate limit. 10/min — vendors tweak their hours rarely.
+    const rl = await checkRateLimitByUser(req, 'set_business_hours', 10, 60_000)
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+        { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+      )
+    }
 const userId = auth.userId
     // Verify ownership
     const ownerCheck = await pool.query(

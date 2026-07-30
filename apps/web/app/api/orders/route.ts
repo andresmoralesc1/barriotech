@@ -4,7 +4,7 @@ import { requireAuth } from '@/lib/auth'
 import { isUuid } from '@/lib/core/utils/slug'
 import { parseJsonBody } from '@/lib/parse-json'
 import pool from '@/lib/db'
-import { checkRateLimit } from '@/lib/rate-limit'
+import { checkRateLimit, checkRateLimitByUser } from '@/lib/rate-limit'
 import { requireSameOrigin } from '@/lib/csrf'
 
 
@@ -78,6 +78,16 @@ export async function POST(req: NextRequest) {
   try {
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
+
+    // Per-user rate limit on order creation. 20/min — generous for legit
+    // multi-vendor ordering, blocks runaway bots from creating orders.
+    const rl = await checkRateLimitByUser(req, 'create_order', 20, 60_000)
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+        { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+      )
+    }
     const userId = auth.userId
 
     // Get buyer profile from userId

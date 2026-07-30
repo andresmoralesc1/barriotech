@@ -3,6 +3,7 @@ import { logger, serializeErr } from '@/lib/logger'
 import { requireAuth, requireVerifiedEmail } from '@/lib/auth'
 import pool from '@/lib/db'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimitByUser } from '@/lib/rate-limit'
 
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -78,6 +79,16 @@ export async function POST(req: NextRequest) {
     // P1-1 (audit 2026-07-27): require verified email before a seller
     // can publish a new product. The dashboard banner promises this gate.
     const auth = await requireVerifiedEmail(req)
+
+    // Per-user rate limit on product creation. 10/min — sellers rarely
+    // create more than a few products in a minute; bots would burst.
+    const rl = await checkRateLimitByUser(req, 'create_product', 10, 60_000)
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+        { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+      )
+    }
     if (auth instanceof NextResponse) return auth
     const decoded = auth
 

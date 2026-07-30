@@ -4,6 +4,7 @@ import { logger, serializeErr } from '@/lib/logger'
 import { getTokenFromRequest } from '@/lib/auth-edge'
 import { verifyToken } from '@/lib/auth'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimitFromRequest } from '@/lib/rate-limit'
 
 // M-001 D: audit trail for vendor contact CTAs (call / WhatsApp / directions).
 //
@@ -33,6 +34,15 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Per-IP rate limit. 20/min — vendor contact CTAs are a known
+  // spam target; legitimate use is 1-2 contacts per session.
+  const rl = await checkRateLimitFromRequest(req, 'vendor_contact_log', 20, 60_000)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+    )
+  }
     const csrf = requireSameOrigin(req); if (csrf) return csrf
   try {
     const { id: vendorId } = await params
