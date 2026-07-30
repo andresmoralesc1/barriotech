@@ -115,7 +115,7 @@ export default function RootLayout({
   }
 
   return (
-    <html lang="es">
+    <html lang="es-CO">
       <head>
         <script
           type="application/ld+json"
