@@ -6,7 +6,7 @@ import { captureApiError, readRequestId } from '@/lib/sentry-helpers'
 import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { signTokenSync } from '@/lib/auth'
-import { checkRateLimit } from '@/lib/rate-limit'
+import { checkRateLimit, checkRateLimitByIdentifier } from '@/lib/rate-limit'
 import { getClientIp } from '@/lib/trusted-ip'
 import { isEmail, normalizeEmail, normalizePhone } from '@/lib/auth-helpers'
 import { parseJsonBody } from '@/lib/parse-json'
@@ -57,8 +57,14 @@ export async function POST(req: NextRequest) {
     // one specific account. 5 attempts / 15min per normalized identifier.
     // We always burn the bucket regardless of validity — otherwise an attacker
     // can probe by enumerating identifiers with low confidence.
+    //
+    // Tier 21: store the hash in rate_limit_attempts.identifier column so
+    // the IP and identifier throttle dimensions are independent — see
+    // lib/rate-limit.ts. Old rows that stuffed the email into the `ip`
+    // column were migrated by sql/101.
     const accountKey = id.toLowerCase()
-    const accountLimit = await checkRateLimit(
+    const accountLimit = await checkRateLimitByIdentifier(
+      req,
       accountKey,
       'login_account',
       5,

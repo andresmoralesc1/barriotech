@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { COLOMBIA_CITIES } from '@/lib/core/constants'
 import { signTokenSync } from '@/lib/auth'
-import { checkRateLimit } from '@/lib/rate-limit'
+import { checkRateLimit, checkRateLimitByIdentifier } from '@/lib/rate-limit'
 import { getClientIp } from '@/lib/trusted-ip'
 import { issueEmailVerificationToken, sendVerificationEmail } from '@/lib/email'
 import { generateUniqueSlug } from '@/lib/vendor-slug'
@@ -130,6 +130,27 @@ export async function POST(req: NextRequest) {
         { error: 'Necesitas al menos un email o un teléfono para registrarte' },
         { status: 400 }
       )
+    }
+
+    // Tier 21: per-identifier throttle so an attacker can't burn through IP
+    // rotations to spam-signup-create accounts using a known victim's email
+    // or phone. Falls back to IP if neither identifier is valid (handled by
+    // the check above — we always have at least one here).
+    const identifierForThrottle = (cleanEmail || cleanPhone || '').trim().toLowerCase()
+    if (identifierForThrottle) {
+      const idLimit = await checkRateLimitByIdentifier(
+        req,
+        identifierForThrottle,
+        'register_account',
+        5,
+        60 * 60 * 1000
+      )
+      if (!idLimit.allowed) {
+        return NextResponse.json(
+          { error: 'Demasiados intentos para esta cuenta. Intenta más tarde.', retryAfter: idLimit.retryAfter },
+          { status: 429, headers: { 'Retry-After': String(idLimit.retryAfter) } }
+        )
+      }
     }
 
     // ── Ley 1581/2012 art. 9 — consent must be explicit and informed.

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger, serializeErr } from '@/lib/logger'
 import pool from '@/lib/db'
-import { checkRateLimit } from '@/lib/rate-limit'
+import { checkRateLimit, checkRateLimitByIdentifier } from '@/lib/rate-limit'
 import { getClientIp } from '@/lib/trusted-ip'
 import { sendPasswordResetEmail, hashToken } from '@/lib/email'
 import { randomBytes } from 'crypto'
@@ -49,8 +49,13 @@ export async function POST(req: NextRequest) {
     // CRIT-6: per-email rate limit prevents targeting a single victim with a
     // burst of resets (e.g. bombarding one address from rotating IPs).
     // Normalize to lowercase so case variation doesn't bypass.
+    //
+    // Tier 21: use the identifier column instead of stuffing the email into
+    // the `ip` column of rate_limit_attempts. Same semantics, cleaner schema,
+    // independent throttling dimension from the IP-based check above.
     const normalizedEmail = email.toLowerCase()
-    const emailLimit = await checkRateLimit(
+    const emailLimit = await checkRateLimitByIdentifier(
+      req,
       normalizedEmail,
       'forgot_password_email',
       3,
