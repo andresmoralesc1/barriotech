@@ -47,8 +47,8 @@ const config: Config = {
         muted: '#78716C',
       },
       fontFamily: {
-        display: ['Inter', 'sans-serif'],
-        sans: ['Inter', 'sans-serif'],
+        display: ['Bricolage Grotesque', 'sans-serif'],
+        sans: ['Bricolage Grotesque', 'sans-serif'],
       },
       boxShadow: {
         'soft': '0 2px 8px -2px rgba(0,0,0,0.08), 0 4px 16px -4px rgba(0,0,0,0.06)',
