@@ -37,7 +37,7 @@ gunzip -c /home/telchar/gps-street-sellers/backups/gps_street_sellers_YYYY-MM-DD
 **Endpoint live (ya verificado):**
 
 ```
-URL: https://gps.neuralflow.space/api/health/ready
+URL: https://barriotech.com.co/api/health/ready
 HTTP: 200 en ~155ms (HTTPS HTTP/2 vía Caddy)
 Body: {"status":"ok","checks":{"database":{"status":"ok","latencyMs":32}}}
 ```
@@ -47,7 +47,7 @@ Body: {"status":"ok","checks":{"database":{"status":"ok","latencyMs":32}}}
 1. Login en https://uptimerobot.com → "+ Add New Monitor"
 2. Monitor Type: **HTTP(s)**
 3. Friendly Name: `BarrioTech — DB Ready`
-4. URL: `https://gps.neuralflow.space/api/health/ready`
+4. URL: `https://barriotech.com.co/api/health/ready`
 5. Monitoring Interval: **5 minutes** (free tier mínimo)
 6. Monitor Timeout: **30 seconds**
 7. HTTP Method: GET (default)
@@ -165,6 +165,6 @@ gunzip -c /tmp/gps_street_sellers_2026-06-29_033001.sql.gz | psql -h localhost -
 | Cron backup 3:30am | ✅ activo | `crontab -l \| grep gps` |
 | Log file | ✅ `/var/log/gps-backup.log` | `ls -la /var/log/gps-backup.log` |
 | First backup | ✅ 7.5KB, 15 tablas | `ls /home/telchar/gps-street-sellers/backups/` |
-| Endpoint HTTPS | ✅ 200 en 155ms | `curl -sI https://gps.neuralflow.space/api/health/ready` |
+| Endpoint HTTPS | ✅ 200 en 155ms | `curl -sI https://barriotech.com.co/api/health/ready` |
 | UptimeRobot | ⏳ setup manual 5min | ver sección 2 |
 | S3 off-site | ⏳ opcional | ver sección 3 |

@@ -8,7 +8,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.4-3178C6?logo=typescript&logoColor=white&style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 
-🌐 **Live demo:** [gps.andresmorales.com.co](https://gps.andresmorales.com.co)
+🌐 **Live demo:** [gps.andresmorales.com.co](https://barriotech.com.co)
 🏗️ **Stack:** Next.js 16 · React 19 · PostgreSQL · React-Leaflet · Zustand · JWT
 
 [Hero screenshot — see `docs/screenshots/00-hero.png`](docs/screenshots/00-hero.png)
@@ -29,7 +29,7 @@
 
 ## 📱 Screenshots
 
-> Public screens captured against the [live demo](https://gps.andresmorales.com.co). Auth-gated screens (vendor detail, seller dashboard, edit profile, settings) live in [`docs/screenshots/`](docs/screenshots/README.md) as TODOs once a demo account is provided.
+> Public screens captured against the [live demo](https://barriotech.com.co). Auth-gated screens (vendor detail, seller dashboard, edit profile, settings) live in [`docs/screenshots/`](docs/screenshots/README.md) as TODOs once a demo account is provided.
 
 | | |
 |---|---|
