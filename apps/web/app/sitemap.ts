@@ -28,14 +28,20 @@ type LocalizedEntry = { path: string; priority: number; changeFrequency: Metadat
 const STATIC_PAGES: LocalizedEntry[] = [
   { path: '/', priority: 1.0, changeFrequency: 'weekly' },
   { path: '/map', priority: 0.9, changeFrequency: 'weekly' },
+  // Buyer-facing discovery pages.
+  { path: '/products', priority: 0.8, changeFrequency: 'daily' },
+  // Vendor onboarding entry point; helps long-tail "vender en BarrioTech" traffic.
+  { path: '/inversionistas', priority: 0.7, changeFrequency: 'monthly' },
   { path: '/como-funciona', priority: 0.8, changeFrequency: 'monthly' },
   { path: '/nosotros', priority: 0.7, changeFrequency: 'monthly' },
   { path: '/contacto', priority: 0.7, changeFrequency: 'monthly' },
   { path: '/preguntas-frecuentes', priority: 0.6, changeFrequency: 'monthly' },
-  { path: '/login', priority: 0.5, changeFrequency: 'monthly' },
-  { path: '/register', priority: 0.5, changeFrequency: 'monthly' },
+  // Legal
   { path: '/privacidad', priority: 0.3, changeFrequency: 'yearly' },
   { path: '/terminos', priority: 0.3, changeFrequency: 'yearly' },
+  // NOTE: /login and /register are intentionally omitted — robots.txt
+  // already Disallows them. Listing them in the sitemap would contradict
+  // the robots policy and waste crawl budget.
 ]
 
 function buildAlternates(esPath: string) {
