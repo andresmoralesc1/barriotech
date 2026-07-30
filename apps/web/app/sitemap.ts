@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next'
 import { logger, serializeErr } from '@/lib/logger'
 import pool from '@/lib/db'
+import { COLOMBIA_CITIES } from '@/lib/core/constants/cities'
 
 /**
  * Dynamic sitemap — pulled at build time / on ISR.
@@ -28,6 +29,9 @@ type LocalizedEntry = { path: string; priority: number; changeFrequency: Metadat
 const STATIC_PAGES: LocalizedEntry[] = [
   { path: '/', priority: 1.0, changeFrequency: 'weekly' },
   { path: '/map', priority: 0.9, changeFrequency: 'weekly' },
+  // Per-city landing pages (Tier 22 SEO): capture long-tail
+  // "vendedores bogota / medellin / cali" traffic.
+  { path: '/ciudades', priority: 0.7, changeFrequency: 'weekly' },
   // Buyer-facing discovery pages.
   { path: '/products', priority: 0.8, changeFrequency: 'daily' },
   // Vendor onboarding entry point; helps long-tail "vender en BarrioTech" traffic.
@@ -119,5 +123,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     logger.error(serializeErr(err), 'Sitemap: failed to fetch vendors')
   }
 
-  return [...staticPages, ...vendorPages]
+  // Tier 22 (SEO): one entry per supported Colombian city.
+  // These pages exist at build time via generateStaticParams so we
+  // don't need to round-trip the DB per city.
+  const cityPages: MetadataRoute.Sitemap = COLOMBIA_CITIES.map((c) => {
+    const esPath = `/ciudades/${c.id}`
+    return {
+      url: `${BASE}${esPath}`,
+      lastModified: new Date(),
+      priority: 0.7,
+      changeFrequency: 'weekly' as const,
+      alternates: { languages: buildAlternates(esPath) },
+    }
+  })
+
+  return [...staticPages, ...cityPages, ...vendorPages]
 }
