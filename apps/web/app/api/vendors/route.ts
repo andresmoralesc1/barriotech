@@ -7,6 +7,7 @@ import { parseVendorFilters, buildVendorWhereClause } from './filters'
 import { generateUniqueSlug } from '@/lib/vendor-slug'
 import { parseJsonBody } from '@/lib/parse-json'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimitByUser } from '@/lib/rate-limit'
 
 // Public: GET /api/vendors
 //
@@ -214,6 +215,14 @@ export async function POST(req: NextRequest) {
   try {
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
+// Per-user rate limit. 10/min — bursty but bounded.
+const rl = await checkRateLimitByUser(req, 'admin_create_vendor', 10, 60_000)
+if (!rl.allowed) {
+  return NextResponse.json(
+    { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+    { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+  )}
+
     // auth.role is 'buyer' | 'seller' per TokenPayload — only sellers create vendors.
     if (auth.role !== 'seller') {
       return NextResponse.json(

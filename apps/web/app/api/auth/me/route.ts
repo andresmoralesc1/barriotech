@@ -7,6 +7,7 @@ import { isPhone, normalizePhone } from '@/lib/auth-helpers'
 import { parseJsonBody } from '@/lib/parse-json'
 import { sanitizeDisplayName } from '@/lib/sanitize'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimitByUser } from '@/lib/rate-limit'
 const noStoreHeaders = { 'Cache-Control': 'no-store' } as const
 async function getUserFromDb(userId: string) {
   const result = await pool.query(
@@ -33,6 +34,14 @@ export async function GET(req: NextRequest) {
   try {
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
+// Per-user rate limit. 20/min — bursty but bounded.
+const rl = await checkRateLimitByUser(req, 'auth_me_update', 20, 60_000)
+if (!rl.allowed) {
+  return NextResponse.json(
+    { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+    { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+  )}
+
 
     const user = await getUserFromDb(auth.userId)
     if (!user) return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })

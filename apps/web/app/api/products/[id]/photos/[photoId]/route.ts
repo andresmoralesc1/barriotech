@@ -13,6 +13,7 @@ import { logger, serializeErr } from '@/lib/logger'
 import { requireAuth } from '@/lib/auth'
 import pool from '@/lib/db'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimitByUser } from '@/lib/rate-limit'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -32,6 +33,14 @@ export async function DELETE(
 
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
+// Per-user rate limit. 10/min — bursty but bounded.
+const rl = await checkRateLimitByUser(req, 'delete_product_photo', 10, 60_000)
+if (!rl.allowed) {
+  return NextResponse.json(
+    { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+    { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+  )}
+
 
     // Ownership check — same shape as the old endpoint.
     const ownerCheck = await pool.query(

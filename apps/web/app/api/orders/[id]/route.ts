@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth'
 import pool from '@/lib/db'
 import { notify } from '@/lib/push'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimitByUser } from '@/lib/rate-limit'
 
 
 // PATCH /api/orders/[id] — change order status (vendor only)
@@ -19,6 +20,14 @@ export async function PATCH(req: NextRequest, { params: paramsPromise }: { param
   try {
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
+// Per-user rate limit. 20/min — bursty but bounded.
+const rl = await checkRateLimitByUser(req, 'update_order', 20, 60_000)
+if (!rl.allowed) {
+  return NextResponse.json(
+    { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+    { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+  )}
+
     const userId = auth.userId
 
     const profileRes = await pool.query(
