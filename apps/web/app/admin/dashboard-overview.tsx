@@ -48,18 +48,9 @@ interface DashboardSummary {
 
 export function DashboardOverview({
   onNavigate,
-  onJumpToAudit,
-  onJumpToAuditByAdmin,
 }: {
   /** Lets the dashboard cards deep-link to the right tab+filter. */
   onNavigate: (tab: 'vendors' | 'clients', filter: 'all' | 'true' | 'false') => void
-  /** Tier 8: click on a recent-activity row → audit log filtered by
-   *  that row's action. */
-  onJumpToAudit: (action: string) => void
-  /** Tier 10: click on the admin email in a recent-activity row →
-   *  audit log filtered by that admin's uuid. The admin email is a
-   *  nested click target inside the row, so it must stopPropagation. */
-  onJumpToAuditByAdmin: (adminId: string) => void
 }) {
   const [data, setData] = useState<DashboardSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -192,12 +183,7 @@ export function DashboardOverview({
             <ul className="divide-y divide-slate-100">
               {data.recentActivity.map((a) => (
                 <li key={a.id}>
-                  <button
-                    type="button"
-                    onClick={() => onJumpToAudit(a.action)}
-                    className="w-full text-left px-4 py-2.5 text-xs hover:bg-blue-50 transition-colors group"
-                    title={`Ver todas las acciones "${a.action}" en la bitácora`}
-                  >
+                  <div className="w-full text-left px-4 py-2.5 text-xs hover:bg-blue-50 transition-colors group">
                     <div className="flex justify-between items-baseline">
                       <span className="font-mono text-slate-700 group-hover:text-blue-700">
                         {a.action}
@@ -213,27 +199,17 @@ export function DashboardOverview({
                     </div>
                     <div className="text-slate-500 mt-0.5 truncate">
                       por{' '}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          // Nested click target — the row's outer onClick
-                          // is the action deep-link. Without stopping
-                          // propagation both fires and the operator lands
-                          // on the wrong filter.
-                          e.stopPropagation()
-                          onJumpToAuditByAdmin(a.adminId)
-                        }}
-                        className="font-medium text-slate-700 hover:text-blue-700 hover:underline focus:outline-none focus:underline"
-                        title={`Ver todas las acciones de ${a.adminEmail ?? a.adminId.slice(0, 8)} en la bitácora`}
-                      >
+                      <span
+                        className="font-medium text-slate-700"
+                        title={a.adminEmail ?? a.adminId.slice(0, 8)}>
                         {a.adminEmail ?? a.adminId.slice(0, 8)}
-                      </button>
+                      </span>
                       {a.targetType && a.targetId && (
                         <> · {a.targetType}:{a.targetId.slice(0, 8)}…</>
                       )}
-                    </div>
-                  </button>
-                </li>
+                  </div>
+                </div>
+              </li>
               ))}
             </ul>
           </div>

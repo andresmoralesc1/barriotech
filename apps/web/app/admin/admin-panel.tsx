@@ -20,9 +20,8 @@ import { VendorDetailDrawer } from './vendor-detail-drawer'
 import { ClientDetailDrawer } from './client-detail-drawer'
 import { OrderDetailDrawer } from './order-detail-drawer'
 import { DashboardOverview } from './dashboard-overview'
-import { AuditLog } from './audit-log'
 
-type Tab = 'overview' | 'vendors' | 'clients' | 'orders' | 'audit'
+type Tab = 'overview' | 'vendors' | 'clients' | 'orders'
 
 interface AdminVendor {
   id: string
@@ -123,14 +122,6 @@ export function AdminPanel() {
   const [orderMinTotal, setOrderMinTotal] = useState('')
   const [orderMaxTotal, setOrderMaxTotal] = useState('')
 
-  // Tier 8: dashboard recent-activity deep-links to the audit log with
-  // the action of the clicked row pre-filled in the filter.
-  const [auditInitialAction, setAuditInitialAction] = useState('')
-  // Tier 10: same idea but for the admin who performed the action —
-  // "what did this admin do?" workflow. The action filter is reset so
-  // the operator sees ALL actions by that admin, not just the one on
-  // the row they clicked.
-  const [auditInitialAdminId, setAuditInitialAdminId] = useState('')
 
   // Vendor batch selection — set of selected vendor ids.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -154,8 +145,7 @@ export function AdminPanel() {
       stored === 'overview' ||
       stored === 'vendors' ||
       stored === 'clients' ||
-      stored === 'orders' ||
-      stored === 'audit'
+      stored === 'orders'
     ) {
       setTab(stored)
     }
@@ -250,7 +240,6 @@ export function AdminPanel() {
     //   · overview → BOTH vendors + clients in parallel, so the tab badges
     //                show real counts even if the user never clicks the
     //                table tabs
-    //   · audit    → component fetches its own data internally, skip here
     if (tab === 'vendors') {
       void fetchVendors()
     } else if (tab === 'clients') {
@@ -303,33 +292,6 @@ export function AdminPanel() {
     },
     []
   )
-
-  /** Tier 8: dashboard recent-activity → audit-log deep-link. Jumps to
-   *  the audit tab with the clicked row's action pre-filled in the
-   *  filter so the operator lands on a narrowed result. */
-  const onJumpToAudit = useCallback((actionName: string) => {
-    setTab('audit')
-    localStorage.setItem('admin-tab', 'audit')
-    setAuditInitialAction(actionName)
-    // Tier 10: switching to an admin-scoped jump clears the action
-    // filter so the operator sees EVERY action by that admin, not just
-    // the one on the clicked row. The action filter is recoverable by
-    // clearing the admin chip.
-    setAuditInitialAdminId('')
-    setOffset(0)
-  }, [])
-
-  /** Tier 10: dashboard recent-activity admin email click → audit-log
-   *  filtered by admin uuid. The whole recent-activity row is owned
-   *  by the action-jump; the admin email is a nested click target so
-   *  callers must stopPropagation (the dashboard already does). */
-  const onJumpToAuditByAdmin = useCallback((adminId: string) => {
-    setTab('audit')
-    localStorage.setItem('admin-tab', 'audit')
-    setAuditInitialAdminId(adminId)
-    setAuditInitialAction('')
-    setOffset(0)
-  }, [])
 
   /** CSV export — re-uses the same active/query filters the table shows,
    *  fetches the CSV endpoint with credentials, and triggers a browser
@@ -551,9 +513,6 @@ export function AdminPanel() {
                 Pedidos
                 <span className="ml-2 text-xs text-slate-500">({ordersTotal})</span>
               </TabButton>
-              <TabButton active={tab === 'audit'} onClick={() => onTabChange('audit')}>
-                Auditoría
-              </TabButton>
             </nav>
           </div>
 
@@ -636,7 +595,7 @@ export function AdminPanel() {
                   {/* Tier 13: master "Limpiar filtros" for the orders
                       toolbar. With 6 filter inputs piled on this is
                       the only way to reset to a clean view without
-                      manually clicking each ×. Mirrors the audit log's
+                      manually clicking each ×.
                       button. */}
                   <button
                     type="button"
@@ -788,14 +747,6 @@ export function AdminPanel() {
           {tab === 'overview' ? (
             <DashboardOverview
               onNavigate={onNavigate}
-              onJumpToAudit={onJumpToAudit}
-              onJumpToAuditByAdmin={onJumpToAuditByAdmin}
-            />
-          ) : tab === 'audit' ? (
-            <AuditLog
-              key={`${auditInitialAction}|${auditInitialAdminId}`}
-              initialAction={auditInitialAction}
-              initialAdminId={auditInitialAdminId}
             />
           ) : loading ? (
             <div className="p-12 text-center text-slate-500">Cargando…</div>
