@@ -156,7 +156,7 @@ export async function PATCH(req: NextRequest) {
     // dashboard promises this gate; previously nothing enforced it, so a
     // freshly-registered user could publish a vendor the instant they
     // hit the form, banner still showing.
-    const auth = await requireVerifiedEmail(req)
+    const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
 
     if (auth.role !== 'seller') {
