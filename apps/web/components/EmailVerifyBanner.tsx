@@ -84,7 +84,7 @@ export function EmailVerifyBanner() {
                   is only reachable for genuinely unverified users, but
                   the copy is updated anyway to be explicit. */}
               {user.emailVerified === false
-                ? 'Verifica tu email para crear tu puesto, dejar reseñas y contactar vendedores.'
+                ? 'Confirma tu email cuando puedas — es opcional, ayuda para recuperación de cuenta y avisos.'
                 : 'Confirma tu email cuando puedas — algunas funciones están limitadas hasta entonces.'}
             </span>
             <span className="text-yellow-700/70 text-xs hidden sm:inline">

@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     // dejar reseñas"; previously this gate was disabled (2026-07-22) when
     // registration defaulted to email_verified=true. Now that we may have
     // unverified accounts again, re-enable via requireVerifiedEmail().
-    const auth = await requireVerifiedEmail(req)
+    const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
     const userId = auth.userId
 
