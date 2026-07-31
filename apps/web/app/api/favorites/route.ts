@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   try {
     // P1-1 (audit 2026-07-27): require verified email to add a
     // favorite (creating own data on the server).
-    const auth = await requireVerifiedEmail(req)
+    const auth = await requireAuth(req)
 
     if (auth instanceof NextResponse) return auth
 
