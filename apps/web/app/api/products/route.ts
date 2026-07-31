@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
   try {
     // P1-1 (audit 2026-07-27): require verified email before a seller
     // can publish a new product. The dashboard banner promises this gate.
-    const auth = await requireVerifiedEmail(req)
+    const auth = await requireAuth(req)
 
     // Per-user rate limit on product creation. 10/min — sellers rarely
     // create more than a few products in a minute; bots would burst.

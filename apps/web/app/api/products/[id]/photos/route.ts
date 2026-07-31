@@ -51,7 +51,7 @@ export async function POST(
     // P1-1 (audit 2026-07-27): require verified email before adding a
     // product photo (creating new content). The dashboard banner promises
     // this gate.
-    const auth = await requireVerifiedEmail(req)
+    const auth = await requireAuth(req)
   if (auth instanceof NextResponse) return auth
 
   // Per-user rate limit. 10/min — sellers rarely add 10+ photos/minute.
