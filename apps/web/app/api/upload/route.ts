@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     // P1-1 (audit 2026-07-27): require verified email before uploading
     // images (creating blob storage records). Photos are surfaced under
     // a vendor/product immediately.
-    const auth = await requireVerifiedEmail(req)
+    const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
     const userId = auth.userId
 
