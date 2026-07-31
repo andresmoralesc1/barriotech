@@ -7,6 +7,7 @@ import { isOpenNow } from '@/lib/business-hours'
 import { parseJsonBody } from '@/lib/parse-json'
 import { normalizePhone } from '@/lib/auth-helpers'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimitByUser } from '@/lib/rate-limit'
 
 
 type RouteContext = {
@@ -178,6 +179,14 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
+// Per-user rate limit. 10/min — bursty but bounded.
+const rl = await checkRateLimitByUser(req, 'delete_vendor', 10, 60_000)
+if (!rl.allowed) {
+  return NextResponse.json(
+    { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+    { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+  )}
+
 
     // Verify ownership
     const ownerCheck = await pool.query(

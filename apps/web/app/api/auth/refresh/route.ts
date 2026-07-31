@@ -5,6 +5,7 @@ import { withRequest } from '@/lib/request-context'
 import { verifyToken, getTokenFromRequest, signTokenSync } from '@/lib/auth'
 import { isTokenRevoked } from '@/lib/auth-db'
 import pool from '@/lib/db'
+import { checkRateLimitByUser } from '@/lib/rate-limit'
 
 /**
  * POST /api/auth/refresh
@@ -46,6 +47,17 @@ import pool from '@/lib/db'
  */
 export async function POST(req: NextRequest) {
   const log = withRequest(req, 'POST /api/auth/refresh')
+
+  // Per-user rate limit. 30/min — token refresh is silent background work;
+  // a burst usually means a misbehaving client or token rotation script.
+  const rl = await checkRateLimitByUser(req, 'auth_refresh', 30, 60_000)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+    )
+  }
+
   try {
     // Try access token first, fall back to refresh-token cookie.
     const accessToken = getTokenFromRequest(req)

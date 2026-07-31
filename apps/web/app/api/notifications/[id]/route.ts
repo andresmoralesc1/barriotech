@@ -5,6 +5,7 @@ import pool from '@/lib/db'
 import { isUuid } from '@/lib/core/utils/slug'
 import { parseJsonBody } from '@/lib/parse-json'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimitByUser } from '@/lib/rate-limit'
 
 
 // PATCH /api/notifications/[id] — mark as read
@@ -16,6 +17,14 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
+// Per-user rate limit. 60/min — bursty but bounded.
+const rl = await checkRateLimitByUser(req, 'mark_notification_read', 60, 60_000)
+if (!rl.allowed) {
+  return NextResponse.json(
+    { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+    { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+  )}
+
     const userId = auth.userId
 
     if (!notifId) {

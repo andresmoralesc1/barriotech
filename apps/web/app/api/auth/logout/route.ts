@@ -3,6 +3,7 @@ import { logger, serializeErr } from '@/lib/logger'
 import pool from '@/lib/db'
 import { verifyToken } from '@/lib/auth'
 import { requireSameOrigin } from '@/lib/csrf'
+import { checkRateLimitByUser } from '@/lib/rate-limit'
 import { AUTH_COOKIE_PATH } from '@/lib/auth-cookies'
 
 function clearCookies(response: NextResponse) {
@@ -30,6 +31,14 @@ function clearCookies(response: NextResponse) {
 
 export async function POST(req: NextRequest) {
     const csrf = requireSameOrigin(req); if (csrf) return csrf
+  // Per-user rate limit. 10/min — bursty but bounded.
+  const rl = await checkRateLimitByUser(req, 'auth_logout', 10, 60_000)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Demasiadas solicitudes. Intenta más tarde.', retryAfter: rl.retryAfter },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+    )
+  }
   try {
     const token = req.cookies.get('token')?.value
 

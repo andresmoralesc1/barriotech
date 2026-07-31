@@ -60,6 +60,13 @@ module.exports = {
         // its Origin header won't match, which 403s the request —
         // acceptable for the transition window.
         APP_ORIGIN: 'https://barriotech.com.co',
+        // 2026-07-30: PM2 7.0.3 caches env_file across `pm2 restart` —
+        // changing .env doesn't re-propagate to the running process.
+        // Hardcoding here (not in env_file) guarantees the new token
+        // wins. Keep in sync with apps/web/.env. Regenerate with:
+        //   node -e 'console.log(require("crypto").randomBytes(48).toString("base64url"))'
+        // (also pasted into apps/web/.env as canonical source).
+        FIELD_AGENT_TOKEN: 'DPBLq4lHgXRGvpg_xLiZeXfQVpiRPLdf7YpGe46jQBkxDspuXFImifPU285lREeX',
       },
       // Out-of-band log files. pm2-logrotate watches these and rotates when
       // either exceeds 50M. We keep 10 compressed copies.
