@@ -3,7 +3,7 @@
 Public-facing screenshots referenced from the main [`README.md`](../README.md).
 Captured against production; some routes require auth and stay as TODOs.
 
-- 🌐 **Production:** https://gps.andresmorales.com.co
+- 🌐 **Production:** https://barriotech.com.co
 - 🏠 **Local dev:** http://localhost:3000
 - 📂 **Path in repo:** `docs/screenshots/`
 - 🖼️ **Reference in README:** `![Caption](docs/screenshots/FILENAME.png)`
@@ -29,7 +29,7 @@ Captured against production; some routes require auth and stay as TODOs.
 
 These need a logged-in session. To capture them:
 
-1. In a regular browser tab, log in to https://gps.andresmorales.com.co as a demo buyer/seller (start one in your DB if none exists).
+1. In a regular browser tab, log in to https://barriotech.com.co as a demo buyer/seller (start one in your DB if none exists).
 2. From DevTools → Application → Cookies, copy the session cookies.
 3. Run:
 
@@ -48,7 +48,7 @@ do
     --browser=chromium \
     --viewport-size=1280,800 \
     --wait-for-timeout=4000 \
-    "https://gps.andresmorales.com.co${path}" \
+    "https://barriotech.com.co${path}" \
     "docs/screenshots/${name}.png"
 done
 ```
@@ -70,7 +70,7 @@ do
     --browser=chromium \
     --viewport-size=1280,800 \
     --wait-for-timeout=4000 \
-    "https://gps.andresmorales.com.co${path}" \
+    "https://barriotech.com.co${path}" \
     "docs/screenshots/${name}.png"
 done
 ```

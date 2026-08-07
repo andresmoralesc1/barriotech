@@ -7,8 +7,8 @@ GPS Street Sellers uses [UptimeRobot](https://uptimerobot.com) (free tier: 50 mo
 | Field | Value |
 |---|---|
 | Monitor Type | HTTP(s) |
-| Friendly Name | `gps.andresmorales.com.co — node` |
-| URL | `https://gps.andresmorales.com.co/api/uptime` |
+| Friendly Name | `barriotech.com.co — node` |
+| URL | `https://barriotech.com.co/api/uptime` |
 | Monitoring Interval | 5 minutes (free tier minimum) |
 | Monitor Timeout | 30 seconds |
 | Keyword (optional) | `ok` — ensures we don't false-positive on a 502/503 error page |
@@ -23,8 +23,8 @@ If it ever returns non-200, the **Node process itself is dead** (PM2 daemon kill
 | Field | Value |
 |---|---|
 | Monitor Type | HTTP(s) |
-| Friendly Name | `gps.andresmorales.com.co — db` |
-| URL | `https://gps.andresmorales.com.co/api/health/ready` |
+| Friendly Name | `barriotech.com.co — db` |
+| URL | `https://barriotech.com.co/api/health/ready` |
 | Monitoring Interval | 5 minutes |
 | Monitor Timeout | 30 seconds |
 | Keyword | `ok` — fires alert if DB check goes red |
@@ -67,5 +67,5 @@ UptimeRobot Public Status Pages (free, 1 page) at `status.andresmorales.com.co` 
 
 ## Fallback / TODO
 
-- Add a third monitor at `https://gps.andresmorales.com.co/api/health` (the legacy alias) once both monitors are running, to make sure the legacy endpoint is not relied on by anything.
+- Add a third monitor at `https://barriotech.com.co/api/health` (the legacy alias) once both monitors are running, to make sure the legacy endpoint is not relied on by anything.
 - Once both monitors are in place, set yourself up for a couple of weeks to confirm "no false positives" before tuning the interval down (3-minute interval is a paid tier; 1-minute is much higher tier).

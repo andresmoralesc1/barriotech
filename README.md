@@ -8,7 +8,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.4-3178C6?logo=typescript&logoColor=white&style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 
-🌐 **Live demo:** [gps.andresmorales.com.co](https://barriotech.com.co)
+🌐 **Live demo:** [barriotech.com.co](https://barriotech.com.co)
 🏗️ **Stack:** Next.js 16 · React 19 · PostgreSQL · React-Leaflet · Zustand · JWT
 
 [Hero screenshot — see `docs/screenshots/00-hero.png`](docs/screenshots/00-hero.png)
