@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/store/useStore'
 import { validateProduct, hasErrors } from '@/lib/products/validation'
+import type { VendorCategory, ServiceModality, ServicePricingUnit } from '@/lib/core/types'
 
 export interface Product {
   id: string
@@ -16,6 +17,13 @@ export interface Product {
   // default to true (column default). Sellers hide a product by setting
   // this to false via PATCH /api/products/[id].
   is_active: boolean
+  // Migration 102: discriminator + service-only fields. Product rows
+  // (existing) have kind='product' and the three service fields are
+  // null. Service rows have all three populated.
+  kind?: 'product' | 'service'
+  duration_minutes?: number | null
+  modality?: ServiceModality | null
+  pricing_unit?: ServicePricingUnit | null
 }
 
 export interface ProductFormSnapshot {
@@ -35,6 +43,10 @@ export interface ProductValidationErrors {
 interface UseProductsPage {
   // data
   vendorId: string | null
+  // Migration 102: vendor.category drives the form shape (product vs
+  // service). null until /api/vendors/me resolves.
+  vendorCategory: VendorCategory | null
+  isServiceCategory: boolean
   products: Product[]
   // Sprint 8 D.2: derived count of is_active=false products, so the header
   // can show a "Tienes N ocultos" hint when the seller has paused items.
@@ -53,6 +65,11 @@ interface UseProductsPage {
   fieldErrors: ProductValidationErrors
   touched: Record<string, boolean>
   initialFormSnapshot: ProductFormSnapshot | null
+  // Migration 102: service offering form state. Only used when
+  // isServiceCategory; rendered as conditional inputs.
+  formDurationMinutes: string
+  formModality: ServiceModality | ''
+  formPricingUnit: ServicePricingUnit | ''
   // delete
   deleteId: string | null
   deleteError: string
@@ -68,6 +85,10 @@ interface UseProductsPage {
   setFormDescription: (v: string) => void
   setFormPrice: (v: string) => void
   setFormPhotoUrl: (v: string) => void
+  // Migration 102: service field setters
+  setFormDurationMinutes: (v: string) => void
+  setFormModality: (v: ServiceModality | '') => void
+  setFormPricingUnit: (v: ServicePricingUnit | '') => void
   setShowForm: (b: boolean) => void
   setTouched: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   // actions
@@ -106,8 +127,20 @@ export function useProductsPage(): UseProductsPage {
 
   // data
   const [vendorId, setVendorId] = useState<string | null>(null)
+  const [vendorCategory, setVendorCategory] = useState<VendorCategory | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Migration 102: true iff the seller's vendor category is one of the
+  // 5 service categories. Drives which form fields render and which
+  // `kind` value is sent on POST. Recomputed each render — vendorCategory
+  // rarely changes, so the cost is trivial.
+  const isServiceCategory =
+    vendorCategory === 'clases' ||
+    vendorCategory === 'bienestar' ||
+    vendorCategory === 'belleza' ||
+    vendorCategory === 'hogar' ||
+    vendorCategory === 'eventos'
 
   // form
   const [showForm, setShowForm] = useState(false)
@@ -122,6 +155,11 @@ export function useProductsPage(): UseProductsPage {
   const [fieldErrors, setFieldErrors] = useState<ProductValidationErrors>({})
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [initialFormSnapshot, setInitialFormSnapshot] = useState<ProductFormSnapshot | null>(null)
+  // Migration 102: service offering form state. Empty strings for
+  // selects (HTML <select> requires a string value).
+  const [formDurationMinutes, setFormDurationMinutes] = useState('')
+  const [formModality, setFormModality] = useState<ServiceModality | ''>('')
+  const [formPricingUnit, setFormPricingUnit] = useState<ServicePricingUnit | ''>('')
 
   // delete + discard
   const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -160,6 +198,12 @@ export function useProductsPage(): UseProductsPage {
           return
         }
         setVendorId(firstVendor.id)
+        // Migration 102: capture vendor category so the form can render
+        // service fields when applicable. The DB CHECK already enforces
+        // 11 valid values; we trust the API response here.
+        if (typeof firstVendor.category === 'string') {
+          setVendorCategory(firstVendor.category as VendorCategory)
+        }
         return fetch(`/api/products?vendorId=${firstVendor.id}`, { credentials: 'include' })
       })
       .then((r) => r?.json())
@@ -185,6 +229,11 @@ export function useProductsPage(): UseProductsPage {
     setEditingId(null)
     setFieldErrors({})
     setTouched({})
+    // Migration 102: clear service field state too so a subsequent
+    // "Agregar" starts clean.
+    setFormDurationMinutes('')
+    setFormModality('')
+    setFormPricingUnit('')
   }, [])
 
   // True if the user has typed something that hasn't been saved.
@@ -198,10 +247,30 @@ export function useProductsPage(): UseProductsPage {
         formPhotoUrl !== initialFormSnapshot.photoUrl
       )
     }
+    // Migration 102: for service-category vendors, treat any service
+    // field as dirty. For product vendors, the original 4 fields cover
+    // it.
+    const serviceDirty =
+      isServiceCategory && Boolean(formDurationMinutes || formModality || formPricingUnit)
     return Boolean(
-      formName.trim() || formDescription.trim() || formPrice.trim() || formPhotoUrl.trim()
+      formName.trim() ||
+      formDescription.trim() ||
+      formPrice.trim() ||
+      formPhotoUrl.trim() ||
+      serviceDirty
     )
-  }, [showForm, initialFormSnapshot, formName, formDescription, formPrice, formPhotoUrl])
+  }, [
+    showForm,
+    initialFormSnapshot,
+    formName,
+    formDescription,
+    formPrice,
+    formPhotoUrl,
+    formDurationMinutes,
+    formModality,
+    formPricingUnit,
+    isServiceCategory,
+  ])
 
   // Warn before tab close / refresh if there are unsaved changes.
   useEffect(() => {
@@ -239,24 +308,51 @@ export function useProductsPage(): UseProductsPage {
     setFormSaving(true)
     setFormError('')
     setFormSuccess('')
+    // Migration 102: when the vendor is a service-category seller,
+    // attach kind='service' + the 3 service-only fields. Product
+    // sellers send only the original 4 fields — server treats missing
+    // kind as 'product'.
+    const body: Record<string, unknown> = {
+      name: formName,
+      description: formDescription,
+      price: priceNum,
+      photo_url: formPhotoUrl || null,
+      vendor_id: vendorId,
+    }
+    if (isServiceCategory) {
+      // Lightweight client validation: the API re-validates these
+      // server-side too (POST /api/products). Surface the message
+      // before round-tripping so the seller sees the error inline.
+      const dur = Number(formDurationMinutes)
+      if (!Number.isFinite(dur) || dur < 5 || dur > 600) {
+        setFormError('Duración inválida (5-600 minutos)')
+        setFormSaving(false)
+        return
+      }
+      if (!formModality || !formPricingUnit) {
+        setFormError('Selecciona modalidad y unidad de precio')
+        setFormSaving(false)
+        return
+      }
+      body.kind = 'service'
+      body.duration_minutes = Math.round(dur)
+      body.modality = formModality
+      body.pricing_unit = formPricingUnit
+    }
     try {
       const res = await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          name: formName,
-          description: formDescription,
-          price: priceNum,
-          photo_url: formPhotoUrl || null,
-          vendor_id: vendorId,
-        }),
+        body: JSON.stringify(body),
       })
       if (res.ok) {
         const data = await res.json()
         setProducts((prev) => [data.product, ...prev])
         resetForm()
-        setFormSuccess('Producto agregado ✅')
+        setFormSuccess(
+          isServiceCategory ? 'Servicio agregado ✅' : 'Producto agregado ✅'
+        )
         setTimeout(() => setFormSuccess(''), 3000)
       } else {
         const data = await res.json()
@@ -266,7 +362,19 @@ export function useProductsPage(): UseProductsPage {
       setFormError('Error de conexión')
     }
     setFormSaving(false)
-  }, [vendorId, formName, formDescription, formPrice, formPhotoUrl, revalidate, resetForm])
+  }, [
+    vendorId,
+    formName,
+    formDescription,
+    formPrice,
+    formPhotoUrl,
+    formDurationMinutes,
+    formModality,
+    formPricingUnit,
+    isServiceCategory,
+    revalidate,
+    resetForm,
+  ])
 
   const handleEdit = useCallback(
     async (productId: string) => {
@@ -339,6 +447,21 @@ export function useProductsPage(): UseProductsPage {
     setFormDescription(snap.description)
     setFormPrice(snap.price)
     setFormPhotoUrl(snap.photoUrl)
+    // Migration 102: populate service state when editing a service row
+    // so the seller sees the existing duration/modality/pricing_unit
+    // pre-filled. PATCH rejects changes to these fields (handled
+    // server-side); we only display them.
+    setFormDurationMinutes(
+      product.kind === 'service' && product.duration_minutes != null
+        ? String(product.duration_minutes)
+        : ''
+    )
+    setFormModality(
+      product.kind === 'service' && product.modality != null ? product.modality : ''
+    )
+    setFormPricingUnit(
+      product.kind === 'service' && product.pricing_unit != null ? product.pricing_unit : ''
+    )
     setEditingId(product.id)
     setInitialFormSnapshot(snap)
     setShowForm(true)
@@ -425,6 +548,9 @@ export function useProductsPage(): UseProductsPage {
   return {
     // data
     vendorId,
+    // Migration 102: vendor category drives the form shape.
+    vendorCategory,
+    isServiceCategory,
     products,
     // Sprint 8 D.2: derived count of is_active=false products.
     // Recomputed on every render — it's just a filter on `products`, so
@@ -444,6 +570,10 @@ export function useProductsPage(): UseProductsPage {
     fieldErrors,
     touched,
     initialFormSnapshot,
+    // Migration 102: service offering form state.
+    formDurationMinutes,
+    formModality,
+    formPricingUnit,
     // delete + discard
     deleteId,
     deleteError,
@@ -458,6 +588,10 @@ export function useProductsPage(): UseProductsPage {
     setFormDescription,
     setFormPrice,
     setFormPhotoUrl,
+    // Migration 102: service field setters
+    setFormDurationMinutes,
+    setFormModality,
+    setFormPricingUnit,
     setShowForm,
     setTouched,
     // actions

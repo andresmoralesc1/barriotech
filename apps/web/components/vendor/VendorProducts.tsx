@@ -21,6 +21,11 @@ interface VendorProductsProps {
 export function VendorProducts({ products, onAddToCart, compact, user, extraPhotos }: VendorProductsProps) {
   const router = useRouter()
 
+  // Migration 102: derive whether any offerings on display are services
+  // so the section header + empty-state copy can flip.
+  const hasServices = products.some((p) => p.kind === 'service')
+  const onlyServices = products.length > 0 && products.every((p) => p.kind === 'service')
+
   if (products.length === 0) {
     return (
       <Card variant="outlined" className="p-4 text-center text-gray-500">
@@ -31,7 +36,9 @@ export function VendorProducts({ products, onAddToCart, compact, user, extraPhot
 
   return (
     <div>
-      <h3 className="text-lg font-bold mb-3">Productos</h3>
+      <h3 className="text-lg font-bold mb-3">
+        {onlyServices ? 'Servicios' : hasServices ? 'Productos y servicios' : 'Productos'}
+      </h3>
       <div className={clsx('grid gap-3', compact ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3')}>
         {products.map((product) => (
           <ProductCard
@@ -65,6 +72,13 @@ function ProductCard({ product, compact, onAddToCart, user, router, extraPhotos 
   const allPhotos = [product.photoUrl, ...(extraPhotos ?? [])].filter(Boolean) as string[]
   const showPhoto = allPhotos.length > 0 && !imgFailed
   const currentPhoto = allPhotos[photoIdx] || product.photoUrl
+  // Migration 102: service-only display bits. Empty strings when the
+  // row is a product so the JSX below stays branchless.
+  const isService = product.kind === 'service'
+  const pricingUnitSuffix = isService ? pricingUnitLabel(product.pricingUnit ?? null) : ''
+  const durationLabel = isService && product.durationMinutes
+    ? ` · ${product.durationMinutes} min`
+    : ''
 
   // Decide whether to show a "Ver más" expand trigger. Hidden when
   // compact mode is on (the seller dashboard uses compact to fit as
@@ -145,8 +159,17 @@ function ProductCard({ product, compact, onAddToCart, user, router, extraPhotos 
               </div>
             </div>
             <p className="text-primary-700 font-bold mt-1">
-              ${product.price.toLocaleString('es-CO')}
+              ${product.price.toLocaleString('es-CO')}{pricingUnitSuffix}{durationLabel}
             </p>
+            {/* Migration 102: a small "A domicilio" pill for service offerings
+                where the provider travels to the client (modality='travels').
+                Helps the buyer spot mobile hairdressers / tatuadores a domicilio
+                without reading the description. */}
+            {isService && product.modality === 'travels' && (
+              <span className="inline-block mt-1 text-[11px] font-semibold uppercase tracking-wide bg-secondary/10 text-secondary-700 px-2 py-0.5 rounded-full">
+                A domicilio
+              </span>
+            )}
           </div>
           {onAddToCart ? (
             user ? (
@@ -193,4 +216,19 @@ function ProductCard({ product, compact, onAddToCart, user, router, extraPhotos 
       </div>
     </Card>
   )
+}
+
+// Migration 102: map pricing_unit to a short Spanish suffix shown next
+// to the price on service cards. Empty string for null (product rows
+// or service rows where the field somehow didn't round-trip).
+function pricingUnitLabel(
+  unit: 'unit' | 'hour' | 'session' | 'class' | null
+): string {
+  switch (unit) {
+    case 'hour': return ' / hora'
+    case 'session': return ' / sesión'
+    case 'class': return ' / clase'
+    case 'unit': return ' / unidad'
+    case null: return ''
+  }
 }

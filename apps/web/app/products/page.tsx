@@ -27,6 +27,8 @@ import { useProductsPage, type ProductValidationErrors } from '@/hooks/useProduc
 export default function ProductsPage() {
   const {
     vendorId,
+    // Migration 102: drives whether the form renders service fields.
+    isServiceCategory,
     products,
     // Sprint 8 D.2: hidden product count, surfaced in the header.
     hiddenCount,
@@ -42,6 +44,13 @@ export default function ProductsPage() {
     formSuccess,
     fieldErrors,
     touched,
+    // Migration 102: service offering form state + setters.
+    formDurationMinutes,
+    formModality,
+    formPricingUnit,
+    setFormDurationMinutes,
+    setFormModality,
+    setFormPricingUnit,
     deleteId,
     deleteError,
     confirmDiscardOpen,
@@ -104,7 +113,7 @@ export default function ProductsPage() {
 
   return (
     <div className="min-h-screen bg-background-cream pb-20">
-      <ProductsPageHeader onBack={tryGoBack} productCount={products.length} hiddenCount={hiddenCount} />
+      <ProductsPageHeader onBack={tryGoBack} productCount={products.length} hiddenCount={hiddenCount} isServiceCategory={isServiceCategory} />
 
       <div className="p-4">
         {showForm ? (
@@ -119,10 +128,19 @@ export default function ProductsPage() {
             formSuccess={formSuccess}
             fieldErrors={fieldErrors}
             touched={touched}
+            // Migration 102: service offering props. Rendered only when
+            // the vendor's category is a service category.
+            isServiceCategory={isServiceCategory}
+            formDurationMinutes={formDurationMinutes}
+            formModality={formModality}
+            formPricingUnit={formPricingUnit}
             onChangeName={setFormName}
             onChangeDescription={setFormDescription}
             onChangePrice={setFormPrice}
             onChangePhotoUrl={setFormPhotoUrl}
+            onChangeDurationMinutes={setFormDurationMinutes}
+            onChangeModality={setFormModality}
+            onChangePricingUnit={setFormPricingUnit}
             onBlur={onFieldBlur}
             onClose={tryCloseForm}
             onSubmit={() => (editingId ? handleEdit(editingId) : handleAdd())}
@@ -134,7 +152,7 @@ export default function ProductsPage() {
             onClick={() => setShowForm(true)}
           >
             <Plus size={18} className="mr-2" />
-            Agregar producto
+            {isServiceCategory ? 'Agregar servicio' : 'Agregar producto'}
           </Button>
         )}
 

@@ -9,6 +9,11 @@ import {
   Palette,
   Shirt,
   Package,
+  GraduationCap,
+  Sparkles,
+  Scissors,
+  Wrench,
+  PartyPopper,
   MapPin,
 } from 'lucide-react'
 import { useStore } from '@/store/useStore'
@@ -23,6 +28,12 @@ const CategoryIconMap: Record<VendorCategory, typeof Apple> = {
   artesanias: Palette,
   ropa: Shirt,
   otros: Package,
+  // service categories — migration 102
+  clases: GraduationCap,
+  bienestar: Sparkles,
+  belleza: Scissors,
+  hogar: Wrench,
+  eventos: PartyPopper,
 }
 
 // M-004 fix: 44px is the Apple HIG / WCAG 2.5.5 minimum tap target. The old

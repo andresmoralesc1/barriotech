@@ -8,6 +8,60 @@ import { checkRateLimitByUser } from '@/lib/rate-limit'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+// Migration 102: parse + validate the 3 service-only fields. Returns an
+// error response on failure, or the validated tuple on success. Single
+// place to evolve if pricing_unit / modality gain values.
+type ServiceFields = {
+  duration_minutes: number
+  modality: 'on_site' | 'travels' | 'remote'
+  pricing_unit: 'unit' | 'hour' | 'session' | 'class'
+}
+function parseServiceFields(body: Record<string, unknown>):
+  | { ok: true; fields: ServiceFields }
+  | { ok: false; response: NextResponse } {
+  const dur = Number(body.duration_minutes)
+  if (!Number.isFinite(dur) || dur < 5 || dur > 600) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: 'Duración inválida (5-600 minutos)' },
+        { status: 400 }
+      ),
+    }
+  }
+  if (body.modality !== 'on_site' && body.modality !== 'travels' && body.modality !== 'remote') {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: 'Modalidad inválida (on_site | travels | remote)' },
+        { status: 400 }
+      ),
+    }
+  }
+  if (
+    body.pricing_unit !== 'unit' &&
+    body.pricing_unit !== 'hour' &&
+    body.pricing_unit !== 'session' &&
+    body.pricing_unit !== 'class'
+  ) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: 'Unidad de precio inválida (unit | hour | session | class)' },
+        { status: 400 }
+      ),
+    }
+  }
+  return {
+    ok: true,
+    fields: {
+      duration_minutes: Math.round(dur),
+      modality: body.modality,
+      pricing_unit: body.pricing_unit,
+    },
+  }
+}
+
 
 // GET /api/products?vendorId=xxx
 //
@@ -30,9 +84,10 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const vendorId = searchParams.get('vendorId')
     const q = searchParams.get('q')
+    const kind = searchParams.get('kind')
     const includeDrafts = searchParams.get('includeDrafts') === 'true'
 
-    let query = 'SELECT id, vendor_id, name, description, price, photo_url, is_active, created_at FROM products WHERE 1=1'
+    let query = 'SELECT id, vendor_id, name, description, price, photo_url, is_active, kind, duration_minutes, modality, pricing_unit, created_at FROM products WHERE 1=1'
     const params: unknown[] = []
 
     if (vendorId) {
@@ -43,6 +98,13 @@ export async function GET(req: NextRequest) {
       }
       params.push(vendorId)
       query += ` AND vendor_id = $${params.length}`
+    }
+
+    // Migration 102: optional ?kind=product|service filter. Default is
+    // both. The DB CHECK keeps the domain closed.
+    if (kind === 'product' || kind === 'service') {
+      params.push(kind)
+      query += ` AND kind = $${params.length}`
     }
 
     // Public view: hide drafts. Sellers viewing their own catalogue
@@ -107,6 +169,7 @@ export async function POST(req: NextRequest) {
     const rawPrice = body.price
     const rawPhotoUrl = body.photo_url
     const rawVendorId = body.vendor_id
+    const rawKind = body.kind
 
     if (typeof rawName !== 'string' || !rawName.trim() || rawName.trim().length > 200) {
       return NextResponse.json(
@@ -143,6 +206,22 @@ export async function POST(req: NextRequest) {
       photo_url = rawPhotoUrl.trim() || null
     }
 
+    // Migration 102: discriminator + 3 service-only fields.
+    // Default 'product' so existing callers keep working. The DB CHECK
+    // (products_kind_fields_consistent) rejects mismatched combos.
+    const kind: 'product' | 'service' = rawKind === 'service' ? 'service' : 'product'
+    let duration_minutes: number | null = null
+    let modality: 'on_site' | 'travels' | 'remote' | null = null
+    let pricing_unit: 'unit' | 'hour' | 'session' | 'class' | null = null
+
+    if (kind === 'service') {
+      const parsed = parseServiceFields(body)
+      if (!parsed.ok) return parsed.response
+      duration_minutes = parsed.fields.duration_minutes
+      modality = parsed.fields.modality
+      pricing_unit = parsed.fields.pricing_unit
+    }
+
     let vendorId: string | null = null
     if (rawVendorId !== undefined && rawVendorId !== null && rawVendorId !== '') {
       if (typeof rawVendorId !== 'string' || !UUID_RE.test(rawVendorId)) {
@@ -175,11 +254,18 @@ export async function POST(req: NextRequest) {
 
     // Sprint 6 D.1: RETURNING includes is_active so the seller can
     // immediately see the publish state of the new product. New products
-    // default to is_active = true (column default).
+    // default to is_active = true (column default). Migration 102 adds
+    // the kind discriminator + service fields.
     const result = await pool.query(
-      `INSERT INTO products (vendor_id, name, description, price, photo_url)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id, vendor_id, name, description, price, photo_url, is_active, created_at`,
-      [vendorId, name, description, priceNum, photo_url]
+      `INSERT INTO products
+         (vendor_id, name, description, price, photo_url,
+          kind, duration_minutes, modality, pricing_unit)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, vendor_id, name, description, price, photo_url,
+                 is_active, kind, duration_minutes, modality, pricing_unit,
+                 created_at`,
+      [vendorId, name, description, priceNum, photo_url,
+       kind, duration_minutes, modality, pricing_unit]
     )
 
     return NextResponse.json({ product: result.rows[0] }, { status: 201 })

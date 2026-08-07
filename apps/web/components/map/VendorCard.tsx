@@ -14,6 +14,11 @@ import {
   Palette,
   Shirt,
   Package,
+  GraduationCap,
+  Sparkles,
+  Scissors,
+  Wrench,
+  PartyPopper,
   MapPin,
   Star,
   X,
@@ -29,6 +34,12 @@ const CategoryIconMap: Record<VendorCategory, typeof Apple> = {
   artesanias: Palette,
   ropa: Shirt,
   otros: Package,
+  // service categories — migration 102
+  clases: GraduationCap,
+  bienestar: Sparkles,
+  belleza: Scissors,
+  hogar: Wrench,
+  eventos: PartyPopper,
 }
 
 interface VendorCardProps {

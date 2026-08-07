@@ -14,6 +14,13 @@ interface Props {
    * Pass 0 (default) to omit the hint.
    */
   hiddenCount?: number
+  /**
+   * Migration 102: when true, the page title flips from "Mis Productos"
+   * to "Mis Productos y Servicios". Driven by the vendor's category —
+   * service categories flip the copy so the page matches the seller's
+   * mental model.
+   */
+  isServiceCategory?: boolean
 }
 
 /**
@@ -24,17 +31,19 @@ interface Props {
  * is wired to the parent's `tryGoBack` so unsaved-form-changes funnel
  * through the discard modal.
  */
-export function ProductsPageHeader({ onBack, productCount, hiddenCount = 0 }: Props) {
+export function ProductsPageHeader({ onBack, productCount, hiddenCount = 0, isServiceCategory = false }: Props) {
   return (
     <header className="bg-white shadow-sm p-4 flex items-center gap-4">
       <Button variant="ghost" onClick={onBack} aria-label="Volver al dashboard">
         <ChevronLeft size={20} />
       </Button>
       <div className="flex-1 min-w-0">
-        <h1 className="text-xl font-bold">Mis Productos</h1>
+        <h1 className="text-xl font-bold">
+          {isServiceCategory ? 'Mis Productos y Servicios' : 'Mis Productos'}
+        </h1>
         <p className="text-sm text-gray-500 flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span>
-            {productCount} {productCount === 1 ? 'producto' : 'productos'}
+            {productCount} {productCount === 1 ? (isServiceCategory ? 'oferta' : 'producto') : (isServiceCategory ? 'ofertas' : 'productos')}
           </span>
           {hiddenCount > 0 && (
             <>

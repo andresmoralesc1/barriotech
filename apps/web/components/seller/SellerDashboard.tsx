@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge'
 import { WhatsAppButton } from '@/components/ui/WhatsAppButton'
 import {
   Star, Apple, UtensilsCrossed, CupSoda, Palette, Shirt, Package,
+  GraduationCap, Sparkles, Scissors, Wrench, PartyPopper,
   ChevronRight, MapPin, Phone,
   TrendingUp, Calendar, Eye,
 } from 'lucide-react'
@@ -25,6 +26,12 @@ const CategoryIconMap: Record<VendorCategory, typeof Apple> = {
   artesanias: Palette,
   ropa: Shirt,
   otros: Package,
+  // service categories — migration 102
+  clases: GraduationCap,
+  bienestar: Sparkles,
+  belleza: Scissors,
+  hogar: Wrench,
+  eventos: PartyPopper,
 }
 
 interface SellerDashboardProps {

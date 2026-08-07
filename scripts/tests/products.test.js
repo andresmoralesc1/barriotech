@@ -155,7 +155,8 @@ test('GET /api/products response shape excludes columns not in allowlist', async
   const res = await fetchJSON('/api/products')
   assert.equal(res.status, 200)
   for (const p of res.body.products.slice(0, 3)) {
-    const allowed = ['id', 'vendor_id', 'name', 'description', 'price', 'photo_url', 'is_active', 'created_at']
+    // Migration 102 (services) added kind + the 3 service-only columns.
+    const allowed = ['id', 'vendor_id', 'name', 'description', 'price', 'photo_url', 'is_active', 'created_at', 'kind', 'duration_minutes', 'modality', 'pricing_unit']
     const keys = Object.keys(p)
     for (const k of keys) {
       assert.ok(allowed.includes(k), `unexpected column ${k} leaked in GET /api/products`)

@@ -3,7 +3,7 @@
 import { clsx } from 'clsx'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { Star, Circle, Apple, UtensilsCrossed, CupSoda, Palette, Shirt, Package } from 'lucide-react'
+import { Star, Circle, Apple, UtensilsCrossed, CupSoda, Palette, Shirt, Package, GraduationCap, Sparkles, Scissors, Wrench, PartyPopper } from 'lucide-react'
 import type { Vendor, VendorCategory, VehicleType } from '@/lib/core/types'
 import { getCategoryInfo, VEHICLE_TYPES } from '@/lib/core/constants'
 
@@ -14,6 +14,12 @@ const CategoryIconMap: Record<VendorCategory, typeof Apple> = {
   artesanias: Palette,
   ropa: Shirt,
   otros: Package,
+  // service categories — migration 102
+  clases: GraduationCap,
+  bienestar: Sparkles,
+  belleza: Scissors,
+  hogar: Wrench,
+  eventos: PartyPopper,
 }
 
 interface VendorProfileProps {

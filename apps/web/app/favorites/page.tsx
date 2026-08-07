@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
-import { Heart, Trash2, MapPin, Star, Store, Apple, UtensilsCrossed, CupSoda, Palette, Shirt, Package } from 'lucide-react'
+import { Heart, Trash2, MapPin, Star, Store, Apple, UtensilsCrossed, CupSoda, Palette, Shirt, Package, GraduationCap, Sparkles, Scissors, Wrench, PartyPopper } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useStore } from '@/store/useStore'
@@ -15,6 +15,12 @@ const CategoryIconMap: Record<VendorCategory, typeof Apple> = {
   artesanias: Palette,
   ropa: Shirt,
   otros: Package,
+  // service categories — migration 102
+  clases: GraduationCap,
+  bienestar: Sparkles,
+  belleza: Scissors,
+  hogar: Wrench,
+  eventos: PartyPopper,
 }
 
 interface FavoriteVendor {

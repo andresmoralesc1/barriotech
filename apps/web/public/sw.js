@@ -4,7 +4,7 @@
 // Bump CACHE_NAME on every deploy to invalidate stale HTML/marketing pages
 // in the browser. The activate handler below deletes any cache not matching
 // the current name.
-const CACHE_NAME = 'barriotech-v2'
+const CACHE_NAME = 'barriotech-v3'
 const OFFLINE_URL = '/'
 
 // Install event — cache core assets

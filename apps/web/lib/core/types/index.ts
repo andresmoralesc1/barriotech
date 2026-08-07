@@ -7,6 +7,33 @@ export type VendorCategory =
   | 'artesanias'
   | 'ropa'
   | 'otros'
+  // service categories — migration 102
+  | 'clases'
+  | 'bienestar'
+  | 'belleza'
+  | 'hogar'
+  | 'eventos'
+
+export type ServiceCategory =
+  | 'clases'
+  | 'bienestar'
+  | 'belleza'
+  | 'hogar'
+  | 'eventos'
+
+export const SERVICE_CATEGORIES: VendorCategory[] = [
+  'clases',
+  'bienestar',
+  'belleza',
+  'hogar',
+  'eventos',
+]
+
+export const isServiceCategory = (c: VendorCategory): boolean =>
+  (SERVICE_CATEGORIES as string[]).includes(c)
+
+export type ServiceModality = 'on_site' | 'travels' | 'remote'
+export type ServicePricingUnit = 'unit' | 'hour' | 'session' | 'class'
 
 export type VehicleType =
   | 'bicicleta'
@@ -68,6 +95,12 @@ export interface Product {
   description: string
   photoUrl: string
   price: number
+  // migration 102: services. kind='product' for existing rows.
+  kind?: 'product' | 'service'
+  // service-only; null for product rows.
+  durationMinutes?: number | null
+  modality?: ServiceModality | null
+  pricingUnit?: ServicePricingUnit | null
 }
 
 export interface Review {

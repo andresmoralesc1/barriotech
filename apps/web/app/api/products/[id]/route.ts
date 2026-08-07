@@ -62,6 +62,13 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       // client posts `isActive` but the handler ignored it.
       isActive?: boolean;
       is_active?: boolean;
+      // Migration 102: service fields. Editing them on a product row is
+      // a no-op (DB CHECK forces NULL), so the helper rejects the
+      // request before we send it to Postgres.
+      kind?: 'product' | 'service';
+      duration_minutes?: number;
+      modality?: 'on_site' | 'travels' | 'remote';
+      pricing_unit?: 'unit' | 'hour' | 'session' | 'class';
     }>(req)
     if (!parsed.ok) {
       return NextResponse.json({ error: parsed.error }, { status: 400 })
@@ -122,6 +129,22 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       }
       params.push(isActiveRaw)
       setClauses.push(`is_active = $${params.length}`)
+    }
+
+    // Migration 102: reject PATCH on the kind discriminator and the 3
+    // service-only fields. Changing the kind of an existing offering is
+    // out of scope for this migration — recreate the offering instead.
+    // Silently ignoring these would hide a bug; 400 surfaces it.
+    if (
+      parsed.body.kind !== undefined ||
+      parsed.body.duration_minutes !== undefined ||
+      parsed.body.modality !== undefined ||
+      parsed.body.pricing_unit !== undefined
+    ) {
+      return NextResponse.json(
+        { error: 'Para cambiar entre producto y servicio, elimina y crea de nuevo' },
+        { status: 400 }
+      )
     }
 
     if (setClauses.length === 0) {
