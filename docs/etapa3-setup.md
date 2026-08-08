@@ -9,7 +9,7 @@ Pendiente: configurar UptimeRobot y S3 cuando quieras.
 ## 1. ✅ Cron de backups — CONFIGURADO
 
 ```
-30 3 * * * /home/telchar/gps-street-sellers/scripts/backup-db.sh >> /var/log/gps-backup.log 2>&1
+30 3 * * * /home/telchar/barriotech/scripts/backup-db.sh >> /var/log/barriotech-backup.log 2>&1
 ```
 
 **Por qué 30 3 (no 0 3):** ya hay un cron semanal a `0 3 * * 0` (Neuralflow).
@@ -19,14 +19,14 @@ Lo moví 30 min después para evitar carrera de pg_dump simultáneo.
 
 ```bash
 crontab -l | grep gps        # debe listar la línea de arriba
-tail -20 /var/log/gps-backup.log   # después de mañana 3:30am
-ls -lh /home/telchar/gps-street-sellers/backups/  # debe haber un .sql.gz nuevo
+tail -20 /var/log/barriotech-backup.log   # después de mañana 3:30am
+ls -lh /home/telchar/barriotech/backups/  # debe haber un .sql.gz nuevo
 ```
 
 **Restaurar desde un backup:**
 
 ```bash
-gunzip -c /home/telchar/gps-street-sellers/backups/gps_street_sellers_YYYY-MM-DD_HHMMSS.sql.gz \
+gunzip -c /home/telchar/barriotech/backups/gps_street_sellers_YYYY-MM-DD_HHMMSS.sql.gz \
   | psql -h localhost -U postgres -d gps_street_sellers
 ```
 
@@ -120,15 +120,15 @@ echo 'endpoint_url = https://nyc3.digitaloceanspaces.com' >> ~/.aws/config
 5. Agregar al `.env` del proyecto:
 
 ```bash
-echo 'BACKUP_S3_BUCKET=barriotech-backups' >> /home/telchar/gps-street-sellers/apps/web/.env
-echo 'BACKUP_S3_ENDPOINT=https://nyc3.digitaloceanspaces.com' >> /home/telchar/gps-street-sellers/apps/web/.env
+echo 'BACKUP_S3_BUCKET=barriotech-backups' >> /home/telchar/barriotech/apps/web/.env
+echo 'BACKUP_S3_ENDPOINT=https://nyc3.digitaloceanspaces.com' >> /home/telchar/barriotech/apps/web/.env
 ```
 
 6. Probar:
 
 ```bash
 # Subir manualmente el último backup para validar
-LATEST=$(ls -t /home/telchar/gps-street-sellers/backups/*.sql.gz | head -1)
+LATEST=$(ls -t /home/telchar/barriotech/backups/*.sql.gz | head -1)
 aws s3 cp "$LATEST" "s3://barriotech-backups/db-backups/test-upload.sql.gz"
 
 # Verificar
@@ -140,7 +140,7 @@ aws s3 ls s3://barriotech-backups/db-backups/
 ```bash
 # Cron está a las 3:30am. Para validar sin esperar, ejecutar:
 BACKUP_S3_BUCKET=barriotech-backups BACKUP_S3_ENDPOINT=https://nyc3.digitaloceanspaces.com \
-  /home/telchar/gps-street-sellers/scripts/backup-db.sh
+  /home/telchar/barriotech/scripts/backup-db.sh
 # Debe terminar con "[backup] uploaded to s3://..."
 ```
 
@@ -163,8 +163,8 @@ gunzip -c /tmp/gps_street_sellers_2026-06-29_033001.sql.gz | psql -h localhost -
 | Item | Estado | Comando verificar |
 |---|---|---|
 | Cron backup 3:30am | ✅ activo | `crontab -l \| grep gps` |
-| Log file | ✅ `/var/log/gps-backup.log` | `ls -la /var/log/gps-backup.log` |
-| First backup | ✅ 7.5KB, 15 tablas | `ls /home/telchar/gps-street-sellers/backups/` |
+| Log file | ✅ `/var/log/barriotech-backup.log` | `ls -la /var/log/barriotech-backup.log` |
+| First backup | ✅ 7.5KB, 15 tablas | `ls /home/telchar/barriotech/backups/` |
 | Endpoint HTTPS | ✅ 200 en 155ms | `curl -sI https://barriotech.com.co/api/health/ready` |
 | UptimeRobot | ⏳ setup manual 5min | ver sección 2 |
 | S3 off-site | ⏳ opcional | ver sección 3 |

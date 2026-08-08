@@ -1,4 +1,4 @@
-# GPS Street Sellers (BarrioTech)
+# BarrioTech
 
 > Real-time geolocation platform that connects informal street vendors with nearby buyers.
 

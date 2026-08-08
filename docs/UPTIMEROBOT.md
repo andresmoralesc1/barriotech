@@ -1,6 +1,6 @@
 # UptimeRobot Configuration
 
-GPS Street Sellers uses [UptimeRobot](https://uptimerobot.com) (free tier: 50 monitors, 5-min checks) for external uptime monitoring. Caddy + PM2 are inside this VPS, so without an external check you wouldn't notice if both go down (e.g. OOM kill of PM2 daemon).
+BarrioTech uses [UptimeRobot](https://uptimerobot.com) (free tier: 50 monitors, 5-min checks) for external uptime monitoring. Caddy + PM2 are inside this VPS, so without an external check you wouldn't notice if both go down (e.g. OOM kill of PM2 daemon).
 
 ## Monitor 1 — Primary ping (Node process alive)
 

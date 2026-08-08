@@ -1,5 +1,5 @@
 {
-  "name": "@gps-street-sellers/web",
+  "name": "@barriotech/web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,7 +9,7 @@
   },
   "_proxyWebpack": "Turbopack (Next 16 default) compiles proxy.ts to an empty middleware.js — the file exists but contains no logic, so /products, /dashboard etc. are NOT protected in production. --webpack forces the legacy bundler which correctly compiles proxy.ts. Safe to remove once Next 16 Turbopack fix lands upstream. /home/telchar/gps-street-sellers/apps/web/app/profile/[id]/page.tsx also had to migrate to async params (Promise<{id}>).",
   "dependencies": {
-    "@gps-street-sellers/core": "*",
+    "@barriotech/core": "*",
     "@sentry/nextjs": "^10.66.0",
     "@supabase/supabase-js": "^2.108.2",
     "bcryptjs": "^3.0.3",

@@ -482,7 +482,7 @@ export function AdminPanel() {
             <span className="text-2xl">🛡️</span>
             <div>
               <h1 className="text-xl font-bold text-slate-900">Admin</h1>
-              <p className="text-xs text-slate-500">GPS Street Sellers</p>
+              <p className="text-xs text-slate-500">BarrioTech</p>
             </div>
           </div>
           <button
