@@ -3,6 +3,7 @@ import { VendorDetailClient } from '@/components/vendor/VendorDetailClient'
 import { isUuid } from '@/lib/core/utils/slug'
 import pool from '@/lib/db'
 import { getCityById } from '@/lib/core/constants/cities'
+import { isServiceCategory } from '@/lib/core/types'
 
 export async function generateMetadata({
   params,
@@ -22,10 +23,17 @@ export async function generateMetadata({
     if (result.rows.length > 0) {
       const v = result.rows[0]
       const cityName = getCityById(v.city_id)?.name ?? 'Colombia'
+      // Migration 102: SEO copy adapts to the vendor's category. Service
+      // sellers show up in "Clases de guitarra", "Masajes", "Peluquería"
+      // searches — generic "vendedor informal" copy underperforms on
+      // those queries. The description flip is the cheap SEO win; the
+      // <title> is left stable because Google's title-rewrite already
+      // surfaces category from the page itself.
+      const offeringNoun = isServiceCategory(v.category) ? 'servicios' : 'productos'
       const title = `${v.name} — ${cityName} · BarrioTech`
       const description = v.description
         ? `${v.description.slice(0, 155)}${v.description.length > 155 ? '…' : ''}`
-        : `${v.name} en ${cityName} — vendedor informal en BarrioTech.`
+        : `${v.name} en ${cityName} — ${offeringNoun} en BarrioTech.`
       const images = v.photo_url ? [v.photo_url] : []
       return {
         title,

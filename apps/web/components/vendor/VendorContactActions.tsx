@@ -3,6 +3,7 @@
 import { Phone, Navigation } from 'lucide-react'
 import { WhatsAppButton } from '@/components/ui/WhatsAppButton'
 import type { Vendor } from '@/lib/core/types'
+import { isServiceCategory } from '@/lib/core/types'
 
 interface Props {
   vendor: Vendor
@@ -38,9 +39,15 @@ async function logContact(vendorId: string, type: 'call' | 'whatsapp' | 'directi
 }
 
 export function VendorContactActions({ vendor }: Props) {
+  // Migration 102: services vendors ("clases", "belleza", etc.) want a
+  // service-flavored opener in WhatsApp, not the generic "productos" copy.
+  // The vendor's `category` is the canonical signal — the buyer opens
+  // this CTA after seeing the vendor detail page, so the message tone
+  // should match what they saw.
+  const offeringNoun = isServiceCategory(vendor.category) ? 'servicios' : 'productos'
   const whatsappUrl = vendor.phone
     ? `https://wa.me/${vendor.phone.replace(/\D/g, '')}?text=${encodeURIComponent(
-        '¡Hola! Quiero saber más sobre tus productos en BarrioTech'
+        `¡Hola! Quiero saber más sobre tus ${offeringNoun} en BarrioTech`
       )}`
     : null
 

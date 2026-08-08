@@ -18,12 +18,22 @@
 ## ✨ Features
 
 - 🗺️ **Real-time vendor map** — buyers see nearby active sellers, GPS freshness < 5 min
-- 🛒 **Vendor profiles** — products, reviews, contact
+- 🛒 **Vendor profiles** — products, services, reviews, contact
 - 📊 **Seller dashboard** — toggle active/inactive, view live metrics
 - 🔔 **Push notifications** for stock/distance alerts
 - 🔐 **JWT auth** with edge runtime, rate-limited (5 attempts / 5 min / IP)
 - 💾 **Automated backups** + health endpoints for monitoring
 - ⚡ **PG-backed sessions** with revocation list
+
+### 🏷️ Vendor categories (11)
+
+The map filter chips and seller category picker share one canonical list:
+
+| Product (6) | Service (5) |
+|---|---|
+| 🍎 Frutas · 🍔 Comida caliente · 🥤 Bebidas · 🎨 Artesanías · 👕 Ropa · 📦 Otros | 🎓 Clases · 💆 Bienestar · 🇧 Belleza · 🛠️ Hogar · 🎉 Eventos |
+
+Sellers in a **service** category can publish offerings with a duration (5–600 min), a modality (`on_site` / `travels` / `remote`), and a pricing unit (`unit` / `hour` / `session` / `class`). Buyers see duration / unit suffix and an "A domicilio" pill on the map when `modality='travels'`. MVP scope: catalog + WhatsApp contact (booking/calendar is out of scope for now).
 
 ---
 
@@ -199,7 +209,7 @@ Point UptimeRobot / BetterStack / Pingdom at `/api/health/ready` (every 60s, ale
 ./scripts/backup-db.sh
 
 # Override destination + retention
-BACKUP_DIR=/var/backups/gps BACKUP_KEEP_DAILY=14 ./scripts/backup-db.sh
+BACKUP_DIR=/var/backups/barriotech BACKUP_KEEP_DAILY=14 ./scripts/backup-db.sh
 
 # Cron (3am daily)
 0 3 * * * /home/telchar/barriotech/scripts/backup-db.sh >> /var/log/barriotech-backup.log 2>&1
@@ -220,7 +230,7 @@ gunzip -c backups/gps_street_sellers_2026-06-28_030001.sql.gz \
 
 ```bash
 npm run build
-pm2 start "npm run start" --name gps
+pm2 start "npm run start" --name barriotech
 # or use pm2 ecosystem.config.js
 ```
 

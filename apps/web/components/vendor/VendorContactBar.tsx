@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { Phone, Navigation } from 'lucide-react'
 import { WhatsAppButton } from '@/components/ui/WhatsAppButton'
 import type { Vendor } from '@/lib/core/types'
+import { isServiceCategory } from '@/lib/core/types'
 
 interface Props {
   vendor: Vendor
@@ -83,9 +84,12 @@ export function VendorContactBar({ vendor }: Props) {
     return () => observer.disconnect()
   }, [])
 
+  // Migration 102: pick "productos" vs "servicios" based on vendor category.
+  // See VendorContactActions for the same rationale.
+  const offeringNoun = isServiceCategory(vendor.category) ? 'servicios' : 'productos'
   const whatsappUrl = vendor.phone
     ? `https://wa.me/${vendor.phone.replace(/\D/g, '')}?text=${encodeURIComponent(
-        '¡Hola! Quiero saber más sobre tus productos en BarrioTech'
+        `¡Hola! Quiero saber más sobre tus ${offeringNoun} en BarrioTech`
       )}`
     : null
 

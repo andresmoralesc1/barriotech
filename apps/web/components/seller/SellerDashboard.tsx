@@ -329,7 +329,7 @@ export function SellerDashboard({
                 ? '🔥 ¡Excelente conversión! Sigue así.'
                 : stats.conversionRate >= 5
                 ? '👍 Buena tasa. Añade más fotos para mejorar.'
-                : '💡 Añade fotos a tus productos para atraer más clientes.'}
+                : '💡 Añade fotos a tus productos o servicios para atraer más clientes.'}
             </p>
           )}
         </Card>
