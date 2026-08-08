@@ -1,5 +1,5 @@
 {
-  "name": "gps-street-sellers",
+  "name": "barriotech",
   "private": true,
   "workspaces": [
     "apps/*",
