@@ -306,3 +306,52 @@ test('apps/web mirror CATEGORIES includes 5 service categories', () => {
       `${f} must define category '${cat}'`)
   }
 })
+
+// --- Audit 2026-08-07: categories lookup table seeded (mig 103) -----------
+
+test('categories lookup table contains all 11 ids (audit fix: lookup must match CHECK)', async () => {
+  // Migration 103 fixed a real bug: the CHECK on vendors.category accepted
+  // 11 values (mig 102) but the `categories` lookup table only had the 6
+  // product categories. POST /api/vendors validates against the lookup
+  // table, so service vendors couldn't be created. This test catches
+  // future drift between CHECK and lookup.
+  const pg = require('pg')
+  const dbUrl = readDbUrl()
+  if (!dbUrl) return
+  const c = new pg.Client({ connectionString: dbUrl })
+  await c.connect()
+  try {
+    const { rows } = await c.query('SELECT id FROM categories ORDER BY id')
+    const ids = rows.map((r) => r.id)
+    for (const expected of ['artesanias','bebidas','belleza','bienestar','clases',
+                            'comida','eventos','frutas','hogar','otros','ropa']) {
+      assert.ok(ids.includes(expected),
+        `categories lookup must contain '${expected}' (got ${ids.join(',')})`)
+    }
+  } finally {
+    await c.end()
+  }
+})
+
+test('GET /api/vendors?category=clases returns at least the seed vendor (E2E)', async () => {
+  // End-to-end: filter chip in FilterBar fires this exact call. The
+  // audit (2026-08-07) found that even with the 5 service cats in the
+  // CHECK + TS constants, services didn't appear on the map because
+  // (a) the categories lookup table was missing them and (b) no test
+  // vendor existed. Both fixed by migration 103 + the seed inserts.
+  // If a future migration drops the seed or the lookup, this test
+  // surfaces the regression before users do.
+  const r = await fetchJSON('/api/vendors?category=clases&limit=10')
+  assert.equal(r.status, 200)
+  assert.ok(Array.isArray(r.body.vendors))
+  // We don't assert count==1 because future seeds may add more — only
+  // assert "at least one" so the test stays useful as the seed grows.
+  assert.ok(r.body.vendors.length >= 1,
+    `expected ≥1 vendor in category=clases (got ${r.body.vendors.length})`)
+})
+
+test('GET /api/vendors?category=belleza returns the travels-modality vendor (E2E)', async () => {
+  const r = await fetchJSON('/api/vendors?category=belleza&limit=10')
+  assert.equal(r.status, 200)
+  assert.ok(r.body.vendors.length >= 1)
+})

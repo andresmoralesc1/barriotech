@@ -11,6 +11,11 @@ import type { Vendor, Product, Review } from '@/lib/core/types'
  * Backend returns snake_case; components consume camelCase. These are
  * the wire shapes so we can map them at the edge without leaking the
  * backend convention into the UI.
+ *
+ * Migration 102: added kind + 3 service-only fields. The wire shape
+ * carries them; the mapping below promotes them to the `Product`
+ * camelCase type so `VendorProducts` can render duration / pricing
+ * unit / "A domicilio" pill without per-call shape branching.
  */
 interface RawProduct {
   id: string
@@ -19,6 +24,10 @@ interface RawProduct {
   description?: string | null
   photo_url?: string | null
   price: string | number
+  kind?: 'product' | 'service' | null
+  duration_minutes?: number | null
+  modality?: 'on_site' | 'travels' | 'remote' | null
+  pricing_unit?: 'unit' | 'hour' | 'session' | 'class' | null
 }
 interface RawReview {
   id: string
@@ -120,6 +129,18 @@ export function useVendorDetail(vendorId: string, vendorSlug?: string) {
             description: p.description || '',
             photoUrl: p.photo_url || '',
             price: parseFloat(p.price as string),
+            // Migration 102: surface kind + service fields so
+            // VendorProducts renders duration / pricing unit / "A
+            // domicilio" pill. Default to product-shaped values so a
+            // row that pre-dates migration 102 (or one with kind
+            // undefined from a misbehaving server) doesn't crash the
+            // consumer.
+            kind: (p.kind ?? 'product') as 'product' | 'service',
+            durationMinutes: p.duration_minutes ?? null,
+            modality: (p.modality ?? null) as
+              | 'on_site' | 'travels' | 'remote' | null,
+            pricingUnit: (p.pricing_unit ?? null) as
+              | 'unit' | 'hour' | 'session' | 'class' | null,
           }))
         )
         setReviews(
