@@ -367,7 +367,7 @@ export function PrivacidadView() {
               <li>
                 Auditorías periódicas del código y dependencias (ver{' '}
                 <a
-                  href="https://github.com/andresmoralesc1/gps-street-sellers"
+                  href="https://github.com/andresmoralesc1/barriotech"
                   className="text-primary-700 underline"
                 >
                   repositorio público

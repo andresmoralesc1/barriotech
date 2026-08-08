@@ -20,10 +20,10 @@
 
 const crypto = require('node:crypto')
 const path = require('node:path')
-const { Client } = require(path.resolve('/home/telchar/gps-street-sellers/node_modules/pg'))
-const bcrypt = require(path.resolve('/home/telchar/gps-street-sellers/node_modules/bcryptjs'))
-require(path.resolve('/home/telchar/gps-street-sellers/node_modules/dotenv')).config({
-  path: path.resolve('/home/telchar/gps-street-sellers/apps/web/.env'),
+const { Client } = require(path.resolve('/home/telchar/barriotech/node_modules/pg'))
+const bcrypt = require(path.resolve('/home/telchar/barriotech/node_modules/bcryptjs'))
+require(path.resolve('/home/telchar/barriotech/node_modules/dotenv')).config({
+  path: path.resolve('/home/telchar/barriotech/apps/web/.env'),
 })
 
 const BASE = process.env.SMOKE_BASE_URL || 'http://localhost:3008'

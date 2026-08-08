@@ -32,7 +32,7 @@ test('1. static /robots.txt points to barriotech.com.co', async () => {
   const fs = require('node:fs')
   const path = require('node:path')
   const body = fs.readFileSync(
-    path.resolve('/home/telchar/gps-street-sellers/apps/web/public/robots.txt'),
+    path.resolve('/home/telchar/barriotech/apps/web/public/robots.txt'),
     'utf8',
   )
   assert.doesNotMatch(body, /gps\.andresmorales\.com\.co/,
@@ -67,7 +67,7 @@ test('3. canonical pages report barriotech.com.co', async () => {
 test('4. APP_ORIGIN reflects barriotech.com.co (csrf.ts warning copy)', async () => {
   const fs = require('node:fs')
   const body = fs.readFileSync(
-    '/home/telchar/gps-street-sellers/apps/web/lib/csrf.ts',
+    '/home/telchar/barriotech/apps/web/lib/csrf.ts',
     'utf8',
   )
   assert.doesNotMatch(body, /gps\.andresmorales\.com\.co/,
@@ -79,7 +79,7 @@ test('4. APP_ORIGIN reflects barriotech.com.co (csrf.ts warning copy)', async ()
 test('5. ecosystem.config.js APP_ORIGIN is barriotech.com.co', async () => {
   const fs = require('node:fs')
   const body = fs.readFileSync(
-    '/home/telchar/gps-street-sellers/ecosystem.config.js',
+    '/home/telchar/barriotech/ecosystem.config.js',
     'utf8',
   )
   // APP_ORIGIN must be the new primary. The legacy host may still

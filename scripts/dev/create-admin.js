@@ -16,10 +16,10 @@
  */
 
 const path = require('path')
-const bcrypt = require(path.resolve('/home/telchar/gps-street-sellers/node_modules/bcryptjs'))
-const { Client } = require(path.resolve('/home/telchar/gps-street-sellers/node_modules/pg'))
-require(path.resolve('/home/telchar/gps-street-sellers/node_modules/dotenv')).config({
-  path: '/home/telchar/gps-street-sellers/apps/web/.env',
+const bcrypt = require(path.resolve('/home/telchar/barriotech/node_modules/bcryptjs'))
+const { Client } = require(path.resolve('/home/telchar/barriotech/node_modules/pg'))
+require(path.resolve('/home/telchar/barriotech/node_modules/dotenv')).config({
+  path: '/home/telchar/barriotech/apps/web/.env',
 })
 
 const BCRYPT_COST = 13

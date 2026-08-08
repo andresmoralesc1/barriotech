@@ -25,9 +25,9 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const path = require('node:path')
-const { Client } = require(path.resolve('/home/telchar/gps-street-sellers/node_modules/pg'))
-require(path.resolve('/home/telchar/gps-street-sellers/node_modules/dotenv')).config({
-  path: path.resolve('/home/telchar/gps-street-sellers/apps/web/.env'),
+const { Client } = require(path.resolve('/home/telchar/barriotech/node_modules/pg'))
+require(path.resolve('/home/telchar/barriotech/node_modules/dotenv')).config({
+  path: path.resolve('/home/telchar/barriotech/apps/web/.env'),
 })
 const { setupTestUser } = require('./_lib/seed')
 
@@ -301,7 +301,7 @@ test('5. regression: robots.txt + manifest.json + favicon still 200', async () =
   }
   // Static robots.txt must still point at barriotech
   const staticRobots = fs.readFileSync(
-    '/home/telchar/gps-street-sellers/apps/web/public/robots.txt',
+    '/home/telchar/barriotech/apps/web/public/robots.txt',
     'utf8',
   )
   assert.match(staticRobots, /Sitemap:\s*https:\/\/barriotech\.com\.co\/sitemap\.xml/,

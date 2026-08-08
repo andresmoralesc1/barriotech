@@ -1,5 +1,5 @@
 /**
- * PM2 ecosystem file for GPS Street Sellers.
+ * PM2 ecosystem file for BarrioTech.
  *
  * Why this file exists:
  * - Next.js doesn't auto-load .env.local at PM2 start unless you point PM2 at it
@@ -7,13 +7,13 @@
  *   at runtime but the shell-launched process never sees it.
  * - The previous "just npm start" approach broke whenever someone needed to change
  *   env (had to pm2 kill the whole daemon, which was scary with other services).
- *   This file makes restarts surgical: `pm2 reload gps` is enough.
+ *   This file makes restarts surgical: `pm2 reload barriotech` is enough.
  *
  * Usage:
  *   pm2 start ecosystem.config.js             # first-time start
- *   pm2 reload gps                            # after code changes (zero-downtime)
- *   pm2 restart gps                           # hard restart (faster than reload)
- *   pm2 logs gps                              # tail logs
+ *   pm2 reload barriotech                     # after code changes (zero-downtime)
+ *   pm2 restart barriotech                    # hard restart (faster than reload)
+ *   pm2 logs barriotech                       # tail logs
  *   pm2 save                                  # persist current process list across reboots
  *   pm2 resurrect                             # restore on server boot (after `pm2 save`)
  *
@@ -24,10 +24,10 @@
 module.exports = {
   apps: [
     {
-      name: 'gps',
+      name: 'barriotech',
       script: 'npm',
       args: 'start -- -p 3005',
-      cwd: '/home/telchar/gps-street-sellers/apps/web',
+      cwd: '/home/telchar/barriotech/apps/web',
       exec_mode: 'fork',
       autorestart: true,
       // PM2 will respawn the app if it crashes. With max_restarts=10 inside
@@ -48,17 +48,13 @@ module.exports = {
       // are NOT already in process.env — and pm2 currently has stale BREVO_API_KEY
       // / EMAIL_FROM saved from before. Reading the file at process spawn ensures
       // the live values in apps/web/.env always win on a fresh restart.
-      env_file: '/home/telchar/gps-street-sellers/apps/web/.env',
+      env_file: '/home/telchar/barriotech/apps/web/.env',
       env: {
         NODE_ENV: 'production',
         PORT: '3005',
         // Must match the public site Origin. If this stays at localhost,
         // requireSameOrigin() 403s every upload / profile PATCH from
         // https://barriotech.com.co (browsers send that Origin).
-        // Tier 14: barriotech.com.co is now the primary brand; the old
-        // gps.andresmorales.com.co subdomain still responds on :3005 but
-        // its Origin header won't match, which 403s the request —
-        // acceptable for the transition window.
         APP_ORIGIN: 'https://barriotech.com.co',
         // 2026-07-30: PM2 7.0.3 caches env_file across `pm2 restart` —
         // changing .env doesn't re-propagate to the running process.
@@ -70,8 +66,8 @@ module.exports = {
       },
       // Out-of-band log files. pm2-logrotate watches these and rotates when
       // either exceeds 50M. We keep 10 compressed copies.
-      out_file: '/home/telchar/.pm2/logs/gps-out.log',
-      error_file: '/home/telchar/.pm2/logs/gps-error.log',
+      out_file: '/home/telchar/.pm2/logs/barriotech-out.log',
+      error_file: '/home/telchar/.pm2/logs/barriotech-error.log',
       merge_logs: false,
       time: true,
     },

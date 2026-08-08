@@ -26,14 +26,14 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const crypto = require('node:crypto')
-const { Client } = require(path.resolve('/home/telchar/gps-street-sellers/node_modules/pg'))
-const bcrypt = require(path.resolve('/home/telchar/gps-street-sellers/node_modules/bcryptjs'))
+const { Client } = require(path.resolve('/home/telchar/barriotech/node_modules/pg'))
+const bcrypt = require(path.resolve('/home/telchar/barriotech/node_modules/bcryptjs'))
 // dotenv directly (vs loadEnv) — the env-loader's path is rooted at
 // /scripts/_lib/..  which resolves to /scripts/apps/web/.env (typo),
 // so we point dotenv at the right file ourselves. Same pattern as the
 // tier-2 smoke test.
-require(path.resolve('/home/telchar/gps-street-sellers/node_modules/dotenv')).config({
-  path: path.resolve('/home/telchar/gps-street-sellers/apps/web/.env'),
+require(path.resolve('/home/telchar/barriotech/node_modules/dotenv')).config({
+  path: path.resolve('/home/telchar/barriotech/apps/web/.env'),
 })
 const { setupTestUser } = require('./_lib/seed')
 

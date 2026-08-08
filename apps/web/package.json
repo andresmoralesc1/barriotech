@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "start": "next start"
   },
-  "_proxyWebpack": "Turbopack (Next 16 default) compiles proxy.ts to an empty middleware.js — the file exists but contains no logic, so /products, /dashboard etc. are NOT protected in production. --webpack forces the legacy bundler which correctly compiles proxy.ts. Safe to remove once Next 16 Turbopack fix lands upstream. /home/telchar/gps-street-sellers/apps/web/app/profile/[id]/page.tsx also had to migrate to async params (Promise<{id}>).",
+  "_proxyWebpack": "Turbopack (Next 16 default) compiles proxy.ts to an empty middleware.js — the file exists but contains no logic, so /products, /dashboard etc. are NOT protected in production. --webpack forces the legacy bundler which correctly compiles proxy.ts. Safe to remove once Next 16 Turbopack fix lands upstream. /home/telchar/barriotech/apps/web/app/profile/[id]/page.tsx also had to migrate to async params (Promise<{id}>).",
   "dependencies": {
     "@barriotech/core": "*",
     "@sentry/nextjs": "^10.66.0",

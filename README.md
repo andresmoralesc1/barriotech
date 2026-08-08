@@ -2,7 +2,7 @@
 
 > Real-time geolocation platform that connects informal street vendors with nearby buyers.
 
-![CI](https://img.shields.io/github/actions/workflow/status/andresmoralesc1/gps-street-sellers/ci.yml?branch=main&style=flat-square)
+![CI](https://img.shields.io/github/actions/workflow/status/andresmoralesc1/barriotech/ci.yml?branch=main&style=flat-square)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js&style=flat-square)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-336791?logo=postgresql&logoColor=white&style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.4-3178C6?logo=typescript&logoColor=white&style=flat-square)
@@ -74,7 +74,7 @@ App runs on `http://localhost:3000` (override with `PORT`).
 ## 📁 Project Structure
 
 ```
-gps-street-sellers/
+barriotech/
 ├── apps/
 │   └── web/              # Next.js 16 App Router (UI + API routes)
 ├── packages/
@@ -202,7 +202,7 @@ Point UptimeRobot / BetterStack / Pingdom at `/api/health/ready` (every 60s, ale
 BACKUP_DIR=/var/backups/gps BACKUP_KEEP_DAILY=14 ./scripts/backup-db.sh
 
 # Cron (3am daily)
-0 3 * * * /home/telchar/gps-street-sellers/scripts/backup-db.sh >> /var/log/gps-backup.log 2>&1
+0 3 * * * /home/telchar/barriotech/scripts/backup-db.sh >> /var/log/barriotech-backup.log 2>&1
 ```
 
 Retention: 7 daily + 4 weekly (Sundays). Optional S3 upload — set `BACKUP_S3_BUCKET`.
