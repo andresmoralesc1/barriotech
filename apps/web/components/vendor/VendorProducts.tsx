@@ -176,7 +176,22 @@ function ProductCard({ product, compact, onAddToCart, user, router, extraPhotos 
               <button
                 onClick={() => onAddToCart(product)}
                 className="p-2 bg-primary text-white rounded-full hover:bg-primary-600 transition-colors flex-shrink-0"
-                aria-label={`Agregar ${product.name} al carrito`}
+                // Migration 102 Phase D2: copy flips to "Reservar"
+                // for service offerings (clases/masajes/etc.). The
+                // cart flow is still a kind-agnostic WhatsApp
+                // handoff (no date/time picker yet) — but at least
+                // the button copy matches the buyer's mental model:
+                // you book a class, you add a product to a cart.
+                aria-label={
+                  product.kind === 'service'
+                    ? `Reservar ${product.name}`
+                    : `Agregar ${product.name} al carrito`
+                }
+                title={
+                  product.kind === 'service'
+                    ? 'Reservar'
+                    : 'Agregar al carrito'
+                }
               >
                 <Plus size={18} />
               </button>

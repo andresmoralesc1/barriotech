@@ -22,6 +22,13 @@ export interface VendorFilters {
   // when modality is set, which is the correct behavior — the chip
   // is implicitly a service-only filter.
   modality: 'on_site' | 'travels' | 'remote' | null
+  // Phase D1: free-text search. Today the client (MapView) does an
+  // in-memory filter on vendor.name only. Server-side expansion:
+  // match `q` against (a) vendor.name + description, and (b) the
+  // name of any of the vendor's active products/services. Typing
+  // "salsa" now finds "Academia Baquiano" because their offering
+  // is called "Clases de salsa".
+  q: string | null
 }
 
 /**
@@ -42,6 +49,10 @@ export function parseVendorFilters(searchParams: URLSearchParams): VendorFilters
     vehicleType: searchParams.get('vehicleType'),
     bbox: searchParams.get('bbox'),
     modality,
+    q: (() => {
+      const raw = searchParams.get('q')
+      return raw && raw.trim() ? raw.trim() : null
+    })(),
   }
 }
 
@@ -131,6 +142,30 @@ export function buildVendorWhereClause(filters: VendorFilters, startAt = 1): Whe
         AND p.modality = $${i}
     )`)
     a.push(filters.modality)
+    i++
+  }
+  if (filters.q) {
+    // Phase D1: free-text search. Matches vendor name + description
+    // OR any of the vendor's active products/services. Uses ILIKE
+    // (case-insensitive) on both sides so a buyer typing "Salsa"
+    // finds a vendor named "academia Baquiano" with an offering
+    // called "Clases de salsa". The first OR matches the vendor
+    // itself; the EXISTS subquery matches via products.
+    //
+    // Cost: EXISTS is an index hit on `idx_products_vendor_id`
+    // plus a row-level ILIKE per product. Acceptable for the
+    // ≤500-vendor cap. Could later swap to `to_tsquery` + GIN
+    // index when the catalog grows past a few thousand offerings.
+    w.push(`AND (
+      v.name ILIKE $${i} OR v.description ILIKE $${i}
+      OR EXISTS (
+        SELECT 1 FROM products p
+        WHERE p.vendor_id = v.id
+          AND p.is_active = true
+          AND p.name ILIKE $${i}
+      )
+    )`)
+    a.push(`%${filters.q}%`)
     i++
   }
   return { where: w.join(' '), args: a }

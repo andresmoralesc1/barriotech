@@ -142,6 +142,12 @@ export function MapView() {
       if (filters.modality) {
         params.set('modality', filters.modality)
       }
+      // Phase D1: send the search query to the server. The server
+      // matches against vendor.name + description + active product
+      // names. Empty / whitespace-only inputs are dropped server-side.
+      if (filters.searchQuery && filters.searchQuery.trim()) {
+        params.set('q', filters.searchQuery.trim())
+      }
       const res = await fetch(`/api/vendors?${params.toString()}`)
       const data = await res.json()
       if (data.vendors) {
