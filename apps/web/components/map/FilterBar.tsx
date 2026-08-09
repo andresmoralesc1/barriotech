@@ -1,7 +1,7 @@
 'use client'
 
 import { clsx } from 'clsx'
-import { Search, X } from 'lucide-react'
+import { Search, X, Home } from 'lucide-react'
 import {
   Apple,
   UtensilsCrossed,
@@ -55,10 +55,10 @@ export function FilterBar() {
   const filters = useStore((s) => s.filters)
   const setFilters = useStore((s) => s.setFilters)
 
-  const hasActiveFilters = filters.category !== null || filters.maxDistanceMeters !== null || filters.searchQuery !== ''
+  const hasActiveFilters = filters.category !== null || filters.maxDistanceMeters !== null || filters.searchQuery !== '' || filters.modality !== null
 
   const clearFilters = () => {
-    setFilters({ category: null, maxDistanceMeters: null, searchQuery: '' })
+    setFilters({ category: null, maxDistanceMeters: null, searchQuery: '', modality: null })
   }
 
   return (
@@ -119,6 +119,33 @@ export function FilterBar() {
         </div>
         {/* Indicador de scroll a la derecha */}
         <div className="pointer-events-none absolute right-0 top-0 bottom-2 w-6 bg-gradient-to-l from-white to-transparent" aria-hidden="true" />
+      </div>
+
+      {/* Migration 102 (services) Phase A2: "Ofrece a domicilio" chip.
+          Sits in its own row above the distance row so it's discoverable
+          without competing with the 11 category chips. Toggling on
+          sets `modality='travels'` which the map fetches as a query
+          param; the API filters vendors to those with at least one
+          service offering that travels. The Home icon + the "A
+          domicilio" copy mirror the pill rendered on service cards
+          in VendorProducts.tsx, so the buyer sees the same word
+          across the funnel. */}
+      <div className="flex gap-2 items-center flex-wrap">
+        <button
+          onClick={() =>
+            setFilters({ modality: filters.modality === 'travels' ? null : 'travels' })
+          }
+          className={clsx(
+            `shrink-0 px-3 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-1.5 ${CHIP_TAP}`,
+            filters.modality === 'travels'
+              ? 'bg-secondary text-white'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          )}
+          aria-pressed={filters.modality === 'travels'}
+        >
+          <Home size={14} />
+          Ofrece a domicilio
+        </button>
       </div>
 
       {/* Distancia */}

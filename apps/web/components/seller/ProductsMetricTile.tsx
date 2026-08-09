@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ChevronRight, Package, Eye, EyeOff } from 'lucide-react'
+import { ChevronRight, Package, Eye, EyeOff, Sparkles } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 
 interface Props {
@@ -9,8 +9,15 @@ interface Props {
   totalCount: number
   /** Hidden (is_active=false) products. */
   hiddenCount: number
-  /** Active (is_active=true) products. Derived = total - hidden. */
-  // Not a prop — derived in render so the caller doesn't have to compute it.
+  /**
+   * Migration 102 Phase C: when true, the vendor's category is a
+   * service category (clases/bienestar/belleza/hogar/eventos). The
+   * tile flips its copy from "Mis productos" to "Mis servicios" and
+   * updates the empty-state hint accordingly. The call site already
+   * has the vendor's category from /api/vendors/me, so passing this
+   * is a one-line addition in the parent.
+   */
+  isServiceCategory?: boolean
 }
 
 /**
@@ -23,19 +30,29 @@ interface Props {
  *
  * Click target is the whole card → goes to /products so the seller can
  * add new items or flip the visibility on existing ones.
+ *
+ * Migration 102 Phase C: copy flips to "Mis servicios" for service
+ * sellers so the dashboard doesn't talk about "productos" to a
+ * hair-salon or dance-class seller.
  */
-export function ProductsMetricTile({ totalCount, hiddenCount }: Props) {
+export function ProductsMetricTile({ totalCount, hiddenCount, isServiceCategory = false }: Props) {
   const publishedCount = totalCount - hiddenCount
+  const noun = isServiceCategory ? 'servicios' : 'productos'
+  const singular = isServiceCategory ? 'servicio' : 'producto'
   return (
     <Link href="/products" className="block" data-testid="products-metric-tile">
       <Card variant="outlined" className="p-4 hover:bg-gray-50 active:bg-gray-100 transition-colors cursor-pointer">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0 flex-1">
             <div className="w-10 h-10 shrink-0 rounded-xl bg-primary-50 flex items-center justify-center">
-              <Package size={20} className="text-primary-700" aria-hidden="true" />
+              {isServiceCategory ? (
+                <Sparkles size={20} className="text-primary-700" aria-hidden="true" />
+              ) : (
+                <Package size={20} className="text-primary-700" aria-hidden="true" />
+              )}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="font-semibold">Mis productos</p>
+              <p className="font-semibold">Mis {noun}</p>
               <p className="text-sm text-gray-500 mt-0.5">
                 <span className="font-bold text-gray-900">{totalCount}</span> en total
               </p>
@@ -58,7 +75,9 @@ export function ProductsMetricTile({ totalCount, hiddenCount }: Props) {
               )}
               {totalCount === 0 && (
                 <p className="text-xs text-amber-700 mt-1 font-medium">
-                  Empezá publicando tu primer producto.
+                  {isServiceCategory
+                    ? `Empezá publicando tu primer ${singular}.`
+                    : 'Empezá publicando tu primer producto.'}
                 </p>
               )}
             </div>

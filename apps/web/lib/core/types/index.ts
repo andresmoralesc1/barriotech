@@ -78,6 +78,15 @@ export interface Vendor {
   // GPS-005: explicit freshness flag so the map and the detail card can
   // render differentiated UI ("online recently" vs "toggle on but stale").
   locationFresh?: boolean
+  // Migration 102 Phase B: service-side aggregates returned by
+  // /api/vendors (LEFT JOIN LATERAL on products). Lets the map popup
+  // + card render "A domicilio" / "X servicios" without round-tripping
+  // to /api/vendors/[id]. All three are optional so existing call
+  // sites that pass a partial Vendor (e.g. the cart, the favorites
+  // list) still typecheck.
+  serviceCount?: number
+  productCount?: number
+  hasTravels?: boolean
 }
 
 export interface VendorLocation {

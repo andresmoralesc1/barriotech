@@ -41,9 +41,28 @@ export async function GET(req: NextRequest) {
   const offsetIdx = filterArgs.length + 2
 
   const query = `
-    SELECT v.*, c.label AS category_label
+    SELECT v.*, c.label AS category_label,
+           -- Migration 102 Phase B: service-side aggregates so the
+           -- map popup can render "A domicilio" / "X servicios" / "3
+           -- productos" without an extra /api/vendors/[id] round-trip.
+           -- The correlated subqueries hit idx_products_vendor_id
+           -- (one per vendor row in the result set — fine for the
+           -- ≤500-vendor cap). A LEFT JOIN + GROUP BY would be cheaper
+           -- but would require restructuring the list + count queries
+           -- to share an aggregate and would break the existing view.
+           COALESCE(svc.service_count, 0)::int AS service_count,
+           COALESCE(svc.product_count, 0)::int AS product_count,
+           COALESCE(svc.has_travels, false) AS has_travels
     FROM vendors_with_sponsorship v
     LEFT JOIN categories c ON v.category = c.id
+    LEFT JOIN LATERAL (
+      SELECT
+        COUNT(*) FILTER (WHERE p.kind = 'service' AND p.is_active)::int AS service_count,
+        COUNT(*) FILTER (WHERE p.kind = 'product' AND p.is_active)::int AS product_count,
+        bool_or(p.modality = 'travels' AND p.is_active AND p.kind = 'service') AS has_travels
+      FROM products p
+      WHERE p.vendor_id = v.id
+    ) svc ON true
     WHERE 1=1 ${filterWhere}
     ORDER BY v.is_sponsored DESC, COALESCE(v.location_updated_at, v.created_at) DESC
     LIMIT $${limitIdx} OFFSET $${offsetIdx}
@@ -137,6 +156,13 @@ export async function GET(req: NextRequest) {
           v.business_hours_end,
           v.business_days,
         ),
+        // Migration 102 Phase B: service aggregates from the LATERAL
+        // join above. Surfaced in the map popup so the buyer sees
+        // "A domicilio" / "3 servicios" before tapping into the
+        // detail page.
+        serviceCount: v.service_count,
+        productCount: v.product_count,
+        hasTravels: v.has_travels,
       }
     })
 

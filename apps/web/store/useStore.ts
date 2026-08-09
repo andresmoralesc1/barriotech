@@ -20,6 +20,11 @@ interface Filters {
   // null = sin límite (mostrar todos). Número = filtrar hasta esa distancia en metros.
   maxDistanceMeters: number | null
   searchQuery: string
+  // Migration 102 (services) Phase A2: filter to vendors whose offerings
+  // include the chosen modality. Today only 'travels' is exposed in the
+  // UI ("Ofrece a domicilio" chip) — 'on_site' / 'remote' are reserved
+  // for future surface area. `null` = no modality filter.
+  modality: 'on_site' | 'travels' | 'remote' | null
 }
 
 export interface CartItem {
@@ -159,6 +164,7 @@ export const useStore = create<AppState>()(
         category: null,
         maxDistanceMeters: null,
         searchQuery: '',
+        modality: null,
       },
       setFilters: (filters) =>
         set((state) => ({ filters: { ...state.filters, ...filters } })),

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
+import { isServiceCategory } from '@/lib/core/types'
 import { Badge } from '@/components/ui/Badge'
 import { WhatsAppButton } from '@/components/ui/WhatsAppButton'
 import {
@@ -360,7 +361,13 @@ export function SellerDashboard({
           <ChecklistItem done={!!vendor.description} label="Descripción" />
           <ChecklistItem done={!!vendor.category && vendor.category !== 'otros'} label="Categoría" />
           <ChecklistItem done={!!vendor.photoUrl} label="Foto de perfil" />
-          <ChecklistItem done={productCount > 0} label="Agregar productos" />
+          <ChecklistItem
+            done={productCount > 0}
+            // Migration 102 Phase C: copy flips for service sellers
+            // (clases/bienestar/belleza/hogar/eventos). Kept generic
+            // for product sellers.
+            label={isServiceCategory(vendor.category) ? 'Agregar servicios' : 'Agregar productos'}
+          />
           <ChecklistItem done={!!vendor.latitude} label="Ubicación (mapa o GPS)" />
           <ChecklistItem done={!!vendor.phone} label="WhatsApp" />
         </div>
@@ -434,7 +441,15 @@ export function SellerDashboard({
       {productCount > 0 && (
         <Card variant="outlined" className="p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold">Mis Productos</h3>
+            {/* Migration 102 Phase C: header flips to "Mis Servicios"
+                for service sellers. The /products page header
+                (ProductsPageHeader) already has a more thorough
+                "Mis Productos y Servicios" treatment — the preview
+                card just mirrors the singular noun so the seller
+                doesn't see "Productos" copy on their own dashboard. */}
+            <h3 className="font-semibold">
+              {isServiceCategory(vendor.category) ? 'Mis Servicios' : 'Mis Productos'}
+            </h3>
             <span className="text-sm text-gray-500">{productCount} en total</span>
           </div>
           <div className="space-y-2">

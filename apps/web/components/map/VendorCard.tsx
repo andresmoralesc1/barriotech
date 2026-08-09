@@ -22,6 +22,7 @@ import {
   MapPin,
   Star,
   X,
+  Home,
 } from 'lucide-react'
 import type { Vendor, VendorCategory } from '@/lib/core/types'
 import { getCategoryInfo } from '@/lib/core/constants'
@@ -103,6 +104,23 @@ export function VendorCard({ vendor, compact, distance, onClose, onViewDetails, 
               <span className="ml-2 text-secondary font-medium">• {formatDistance(distance)}</span>
             )}
           </p>
+          {/* Migration 102 Phase B: pill on the map popup so a buyer
+              scanning the map can tell which vendors travel to the
+              client before tapping through. The data comes from the
+              /api/vendors LATERAL join (vendor.hasTravels) so we
+              don't need a second round-trip. Same copy as the
+              per-service pill in VendorProducts.tsx for consistency. */}
+          {vendor.hasTravels && (
+            <p className="mt-1">
+              <span
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-secondary/10 text-secondary-700"
+                title="Este vendedor ofrece servicios a domicilio"
+              >
+                <Home size={10} aria-hidden="true" />
+                A domicilio
+              </span>
+            </p>
+          )}
           {vendor.businessHours && (
             <p className="text-xs text-gray-400 mt-0.5">
               {vendor.isOpen !== false ? (

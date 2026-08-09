@@ -13,6 +13,7 @@ import { ConnectivityIndicator } from '@/components/seller/ConnectivityIndicator
 import { FloatingActionButton } from '@/components/seller/FloatingActionButton'
 import { CopyPublicLink } from '@/components/seller/CopyPublicLink'
 import { ProductsMetricTile } from '@/components/seller/ProductsMetricTile'
+import { isServiceCategory, type VendorCategory } from '@/lib/core/types'
 import { toast as notify } from '@/components/ui/Toast'
 import { VendorVisibility } from '@/components/seller/VendorVisibility'
 import { WhatsAppCatalog } from '@/components/seller/WhatsAppCatalog'
@@ -548,6 +549,11 @@ export function DashboardContent() {
               <ProductsMetricTile
                 totalCount={products.length}
                 hiddenCount={products.filter((p) => p.is_active === false).length}
+                // Migration 102 Phase C: flip the tile copy to "Mis
+                // servicios" + Sparkles icon for service sellers so the
+                // tile doesn't say "productos" to a hair-salon or
+                // dance-class seller.
+                isServiceCategory={isServiceCategory(vendorData.category as VendorCategory)}
               />
 
               {/* N13: WhatsApp catalog */}

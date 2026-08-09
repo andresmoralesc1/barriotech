@@ -15,6 +15,13 @@ export interface VendorFilters {
   cityId: string | null
   vehicleType: string | null
   bbox: string | null
+  // Migration 102 (services) Phase A2: filter to vendors that have at
+  // least one active service offering with the given modality. Only
+  // matters for service categories (clases/bienestar/belleza/hogar/
+  // eventos); a `comida` vendor with no services returns 0 rows
+  // when modality is set, which is the correct behavior — the chip
+  // is implicitly a service-only filter.
+  modality: 'on_site' | 'travels' | 'remote' | null
 }
 
 /**
@@ -22,6 +29,11 @@ export interface VendorFilters {
  * Returns plain values (already coerced) for use in buildVendorWhereClause.
  */
 export function parseVendorFilters(searchParams: URLSearchParams): VendorFilters {
+  const rawModality = searchParams.get('modality')
+  const modality: 'on_site' | 'travels' | 'remote' | null =
+    rawModality === 'on_site' || rawModality === 'travels' || rawModality === 'remote'
+      ? rawModality
+      : null
   return {
     category: searchParams.get('category'),
     active: searchParams.get('active'),
@@ -29,6 +41,7 @@ export function parseVendorFilters(searchParams: URLSearchParams): VendorFilters
     cityId: searchParams.get('cityId'),
     vehicleType: searchParams.get('vehicleType'),
     bbox: searchParams.get('bbox'),
+    modality,
   }
 }
 
@@ -103,6 +116,22 @@ export function buildVendorWhereClause(filters: VendorFilters, startAt = 1): Whe
         w.push(`AND v.longitude BETWEEN $${base + 2} AND $${base + 3}`)
       }
     }
+  }
+  if (filters.modality) {
+    // EXISTS subquery (not a JOIN) so the count query and the list
+    // query both see the same vendor row count — no DISTINCT needed.
+    // The correlated subquery is fast for the typical map viewport
+    // (≤500 vendors) because `idx_products_vendor_id` already
+    // exists from the original products indexing pass.
+    w.push(`AND EXISTS (
+      SELECT 1 FROM products p
+      WHERE p.vendor_id = v.id
+        AND p.is_active = true
+        AND p.kind = 'service'
+        AND p.modality = $${i}
+    )`)
+    a.push(filters.modality)
+    i++
   }
   return { where: w.join(' '), args: a }
 }

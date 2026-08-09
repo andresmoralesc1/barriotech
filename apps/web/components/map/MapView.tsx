@@ -135,6 +135,13 @@ export function MapView() {
       if (hasRealGeolocation && selectedCity) {
         params.set('cityId', selectedCity.id)
       }
+      // Migration 102 Phase A2: "Ofrece a domicilio" filter. Server-side
+      // via the /api/vendors filters builder (EXISTS subquery on products
+      // with the chosen modality). Only attached when the filter is on
+      // so the default request shape stays unchanged.
+      if (filters.modality) {
+        params.set('modality', filters.modality)
+      }
       const res = await fetch(`/api/vendors?${params.toString()}`)
       const data = await res.json()
       if (data.vendors) {
@@ -154,7 +161,7 @@ export function MapView() {
       console.error('Failed to fetch vendors:', err)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCity.id, hasRealGeolocation])
+  }, [selectedCity.id, hasRealGeolocation, filters.modality])
 
   // MAP-005: when SSE delivers a per-vendor update, patch the existing entry
   // in place — do NOT rebuild the array. This is the key fix for the
@@ -451,8 +458,18 @@ export function MapView() {
           filteredVendors.map((vendor) => {
             if (!vendor.latitude || !vendor.longitude) return null
             const cat = (vendor.category as VendorCategory) || 'otros'
+            // Local emoji map for the Leaflet pin label. Mirrors the
+            // emoji in `lib/core/constants/categories.ts` (the Lucide
+            // icons used by FilterBar + VendorCard live elsewhere).
+            // Migration 102 audit: the 5 service categories used to
+            // fall through to the `otros` `📦` fallback and looked
+            // identical on the map — confusing because a `clases` pin
+            // and an `otros` pin shared the same glyph. Each service
+            // category now gets a distinct emoji.
             const catMap: Record<string, string> = {
               frutas: '🥑', comida: '🍳', bebidas: '🧃', artesanias: '🎨', ropa: '👕', otros: '📦',
+              // service categories — migration 102
+              clases: '🎓', bienestar: '💆', belleza: '💇', hogar: '🛠️', eventos: '🎉',
             }
             const emoji = catMap[cat] || '📦'
             const catColor = getCategoryInfo(cat).color
