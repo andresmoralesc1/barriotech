@@ -47,6 +47,108 @@ import '@/lib/leaflet-icon-fix'
 // MapPanToVendor, MapRecenter) moved to ./MapHelpers on 2026-07-21 to keep
 // this file under 500 lines. Imported above.
 
+// Phase E2: extracted from the inline Marker render. Builds the L.DivIcon
+// HTML + className + size for a vendor marker. Two visual variants:
+//   - "located" (default): teardrop pin with the category color and
+//     the vendor emoji; the standard BarrioTech pin shape.
+//   - "city-wide" (Phase E2): round shape with a dashed border and a
+//     subtitle ("A domicilio" if hasTravels, else "En toda la
+//     ciudad") so service vendors without a fixed location still
+//     appear on the map at the city center with a clearly
+//     distinguishable affordance.
+// Pure function (no React state) so it's cacheable by the icon cache
+// in MapView's render path.
+type MarkerIconProps = {
+  emoji: string
+  catColor: string
+  ringColor: string
+  ringWidth: number
+  // All flags below are optional because the underlying Vendor type
+  // treats them as `boolean | undefined` (the API may omit them
+  // when the value is null in the DB). The function treats any
+  // falsy value as "off" — no need for the caller to default.
+  sponsored?: boolean
+  showClosedBadge?: boolean
+  isSelected?: boolean
+  hasLocation: boolean
+  hasTravels?: boolean
+  vendorName: string
+  activeVendorsCount: number
+}
+function buildVendorMarkerIcon(props: MarkerIconProps): L.DivIcon {
+  const {
+    emoji, catColor, ringColor, ringWidth, sponsored, showClosedBadge,
+    isSelected, hasLocation, hasTravels, vendorName, activeVendorsCount,
+  } = props
+
+  const pulseRing = isSelected
+    ? '<div class="vendor-marker-pulse" style="position:absolute;inset:-6px;border-radius:50%;background:rgba(194,65,12,0.35);animation:marker-pulse-ring 1.4s ease-in-out infinite;pointer-events:none;"></div>'
+    : ''
+
+  // Vendor name caption (Sprint 5 B-004) — 14-char truncated label
+  // anchored below the pin. Hidden on mobile when too many vendors
+  // are visible to keep the map scannable.
+  const labelText = String(vendorName || '').slice(0, 14) + (
+    String(vendorName || '').length > 14 ? '…' : ''
+  )
+  const isMobileIcon = typeof window !== 'undefined' && window.innerWidth < 640
+  const showLabel = isMobileIcon && activeVendorsCount <= 12
+  const labelHtml = showLabel
+    ? `<div style="position:absolute;top:46px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,0.95);backdrop-filter:blur(4px);color:#1f2937;font-size:10px;font-weight:600;line-height:1;padding:2px 6px;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,0.25);white-space:nowrap;max-width:96px;overflow:hidden;text-overflow:ellipsis;pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">${labelText}</div>`
+    : ''
+
+  // City-wide subtitle: tells the buyer this vendor doesn't have a
+  // fixed pin location. "A domicilio" if the vendor travels, else
+  // "En toda la ciudad" (covers remote / on_site-without-GPS).
+  const cityWideBadge = hasLocation
+    ? ''
+    : `<div style="position:absolute;bottom:-22px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,0.95);backdrop-filter:blur(4px);color:#0f766e;font-size:9px;font-weight:700;line-height:1;padding:2px 6px;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,0.25);white-space:nowrap;pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;text-transform:uppercase;letter-spacing:0.3px;">${
+        hasTravels ? 'A domicilio' : 'En toda la ciudad'
+      }</div>`
+
+  // Sponsored star badge: top-right of the pin.
+  const starBadge = sponsored
+    ? '<span style="position:absolute;top:-6px;right:-6px;background:#F59E0B;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:10px;box-shadow:0 1px 3px rgba(0,0,0,0.3);">⭐</span>'
+    : ''
+  // Closed badge: bottom-left of the pin.
+  const closedBadge = showClosedBadge
+    ? '<span style="position:absolute;bottom:-4px;left:-4px;background:#6B7280;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:9px;box-shadow:0 1px 3px rgba(0,0,0,0.3);color:white;font-weight:600;">⏻</span>'
+    : ''
+
+  // Inner shape: teardrop for located, circle for city-wide.
+  const innerShape = hasLocation
+    ? `<div style="
+        background: ${catColor};
+        width: 42px; height: 42px;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        border: ${ringWidth}px solid ${ringColor};
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3)${sponsored ? ', 0 0 12px rgba(245, 158, 11, 0.6)' : ''};
+        display: flex; align-items: center; justify-content: center;
+        font-size: 20px; position: relative;
+      "><span style="transform: rotate(45deg);">${emoji}</span>${starBadge}${closedBadge}${pulseRing}</div>`
+    : `<div style="
+        background: ${catColor};
+        width: 42px; height: 42px;
+        border-radius: 50%;
+        border: 2px dashed ${ringColor};
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3)${sponsored ? ', 0 0 12px rgba(245, 158, 11, 0.6)' : ''};
+        display: flex; align-items: center; justify-content: center;
+        font-size: 20px; position: relative;
+        opacity: 0.85;
+      ">${emoji}${starBadge}${closedBadge}${pulseRing}</div>${cityWideBadge}`
+
+  return new L.DivIcon({
+    html: innerShape + labelHtml,
+    className: hasLocation
+      ? 'vendor-category-marker'
+      : 'vendor-category-marker vendor-category-marker--citywide',
+    iconSize: [42, hasLocation ? 42 : 64],
+    iconAnchor: [21, hasLocation ? 42 : 22],
+    popupAnchor: [0, hasLocation ? -44 : -56],
+  })
+}
+
 export function MapView() {
   const selectedCity = useStore((s) => s.selectedCity)
   const setSelectedCity = useStore((s) => s.setSelectedCity)
@@ -462,7 +564,15 @@ export function MapView() {
           </Marker>
         ) : (
           filteredVendors.map((vendor) => {
-            if (!vendor.latitude || !vendor.longitude) return null
+            // Phase E2: service vendors without a fixed location (mobile
+            // hairdressers who travel, remote tutors) now appear on the
+            // map at the city center instead of being filtered out.
+            // The API change (filters.ts Phase E1) lets them through
+            // the withLocation filter; this branch is the visual
+            // counterpart — same emoji + color, but a circular shape
+            // (not the teardrop) and a dashed border so the buyer
+            // visually distinguishes "I'm here" from "I come to you".
+            const hasLocation = !!(vendor.latitude && vendor.longitude)
             const cat = (vendor.category as VendorCategory) || 'otros'
             // Local emoji map for the Leaflet pin label. Mirrors the
             // emoji in `lib/core/constants/categories.ts` (the Lucide
@@ -503,52 +613,23 @@ export function MapView() {
             // instance and Leaflet skips `setIcon`. The cache ref persists
             // across renders, and stale entries are evicted if the selected
             // vendor changes (selected state is part of the key).
-            const iconKey = `${cat}|${sponsored ? 1 : 0}|${showClosedBadge ? 1 : 0}|${isSelected ? 1 : 0}`
+            // Phase E2: iconKey includes `hasLocation` so city-wide pins
+            // get their own icon variant.
+            const iconKey = `${cat}|${sponsored ? 1 : 0}|${showClosedBadge ? 1 : 0}|${isSelected ? 1 : 0}|${hasLocation ? 1 : 0}`
             let markerIcon = iconCacheRef.current.get(iconKey)
             if (!markerIcon) {
-              const pulseRing = isSelected
-                ? '<div class="vendor-marker-pulse" style="position:absolute;inset:-6px;border-radius:50%;background:rgba(194,65,12,0.35);animation:marker-pulse-ring 1.4s ease-in-out infinite;pointer-events:none;"></div>'
-                : ''
-              // Sprint 5 B-004: vendor name appears as a small caption BELOW
-              // the pin. Truncated to 14 chars so dense clusters don't overflow.
-              // The label is a sibling div anchored under the pin via the
-              // `iconAnchor` shift below. `whitespace-nowrap text-overflow:
-              // ellipsis` keeps long names inside the chip.
-              const labelText = String(vendor.name || '').slice(0, 14) + (
-                String(vendor.name || '').length > 14 ? '…' : ''
-              )
-              const isMobileIcon = typeof window !== 'undefined' && window.innerWidth < 640
-              // Hide labels on mobile when the bottom sheet is open OR when
-              // there are too many vendors (cluster). Threshold 12 is
-              // empirical — at ~25 markers on a 390px viewport the labels
-              // create a wall of text; 12 keeps the map scannable.
-              const showLabel = isMobileIcon && activeVendors.length <= 12
-              const labelHtml = showLabel
-                ? `<div style="position:absolute;top:46px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,0.95);backdrop-filter:blur(4px);color:#1f2937;font-size:10px;font-weight:600;line-height:1;padding:2px 6px;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,0.25);white-space:nowrap;max-width:96px;overflow:hidden;text-overflow:ellipsis;pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">${labelText}</div>`
-                : ''
-              markerIcon = new L.DivIcon({
-                html: `<div style="
-                  background: ${catColor};
-                  width: 42px;
-                  height: 42px;
-                  border-radius: 50% 50% 50% 0;
-                  transform: rotate(-45deg);
-                  border: ${ringWidth}px solid ${ringColor};
-                  box-shadow: 0 2px 8px rgba(0,0,0,0.3)${sponsored ? ', 0 0 12px rgba(245, 158, 11, 0.6)' : ''};
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  font-size: 20px;
-                  position: relative;
-                "><span style="transform: rotate(45deg);">${emoji}</span>${
-                  sponsored ? '<span style="position:absolute;top:-6px;right:-6px;background:#F59E0B;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:10px;transform:rotate(45deg);box-shadow:0 1px 3px rgba(0,0,0,0.3);">⭐</span>' : ''
-                }${
-                  showClosedBadge ? '<span style="position:absolute;bottom:-4px;left:-4px;background:#6B7280;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:9px;transform:rotate(45deg);box-shadow:0 1px 3px rgba(0,0,0,0.3);color:white;font-weight:600;">⏻</span>' : ''
-                }${pulseRing}</div>${labelHtml}`,
-                className: 'vendor-category-marker',
-                iconSize: [42, 42],
-                iconAnchor: [21, 42],
-                popupAnchor: [0, -44],
+              markerIcon = buildVendorMarkerIcon({
+                emoji,
+                catColor,
+                ringColor,
+                ringWidth,
+                sponsored,
+                showClosedBadge,
+                isSelected,
+                hasLocation,
+                hasTravels: vendor.hasTravels,
+                vendorName: vendor.name,
+                activeVendorsCount: activeVendors.length,
               })
               iconCacheRef.current.set(iconKey, markerIcon)
             }
@@ -556,7 +637,18 @@ export function MapView() {
             return (
               <Marker
                 key={vendor.id}
-                position={[vendor.latitude, vendor.longitude]}
+                // Phase E2: city-wide pins position at the city center
+                // (no GPS pings). We don't spread the pins across a grid
+                // because that would mislead the buyer about the
+                // vendor's true location; stacking at the center with
+                // distinct visual treatment (round + dashed border +
+                // subtitle) is honest about the "I serve all of <city>"
+                // affordance.
+                position={
+                  hasLocation
+                    ? [vendor.latitude!, vendor.longitude!]
+                    : [selectedCity.center[0], selectedCity.center[1]]
+                }
                 icon={markerIcon}
                 eventHandlers={{
                   click: () => {

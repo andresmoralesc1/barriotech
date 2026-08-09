@@ -104,7 +104,22 @@ export function buildVendorWhereClause(filters: VendorFilters, startAt = 1): Whe
     w.push(`AND v.is_active = true`)
   }
   if (filters.withLocation) {
-    w.push(`AND v.latitude IS NOT NULL AND v.longitude IS NOT NULL`)
+    // Phase E1: vendors without a fixed location can still appear on
+    // the map if they're a service vendor with modality=travels or
+    // modality=remote. A mobile hairdresser who travels to the client
+    // doesn't need to publish their home address to be discoverable,
+    // and a remote tutor doesn't have a "location" at all. Both
+    // get rendered at the city center on the map (see MapView
+    // city-wide pin handling).
+    //
+    // Product vendors (frutas/comida/etc) still REQUIRE a fixed
+    // location — a fruit cart without a GPS ping has no map
+    // presence, which is the right UX (the buyer can't walk to a
+    // pin that's not on the map).
+    w.push(`AND (
+      (v.latitude IS NOT NULL AND v.longitude IS NOT NULL)
+      OR v.category IN ('clases','bienestar','belleza','hogar','eventos')
+    )`)
   }
   if (filters.cityId) {
     w.push(`AND v.city_id = $${i}`)
