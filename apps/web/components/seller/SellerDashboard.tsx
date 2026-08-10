@@ -336,18 +336,34 @@ export function SellerDashboard({
         </Card>
       ) : null}
 
-      {/* N15: Weekly ranking */}
+      {/* N15: Weekly ranking. Was purple→pink gradient + raw percentile
+          in a 40x40 circle; the design hook flagged it as an AI palette
+          tell and the body text (text-gray-600 over the gradient) was
+          below WCAG AA on a bright phone. Now: primary-tinted surface,
+          medal icon instead of a raw number (the bare "50" inside a
+          circle read as a percentage rank, not a rank percentile),
+          and stone-700 body text for AA contrast. */}
       {typeof stats.rankPercentile === 'number' && (
-        <Card variant="outlined" className="p-4 bg-gradient-to-r from-purple-50 to-pink-50">
+        <Card variant="outlined" className="p-4 bg-primary-50/40 border-primary-200">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-purple-500 text-white flex items-center justify-center font-bold">
-              {stats.rankPercentile}
+            <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center flex-shrink-0">
+              {/* Medal glyph signals "ranking" without a number that
+                  could be misread as a percentage. The numeric value
+                  lives in the headline next to the medal. */}
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+                <path d="M4 22h16" />
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+                <path d="M18 2H6v10a6 6 0 0 0 12 0V2Z" />
+              </svg>
             </div>
-            <div className="flex-1">
-              <p className="font-semibold text-gray-800">
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-stone-900">
                 Top {stats.rankPercentile}% en tu categoría
               </p>
-              <p className="text-xs text-gray-600">Esta semana en tu ciudad</p>
+              <p className="text-xs text-stone-600 mt-0.5">Esta semana en tu ciudad</p>
             </div>
           </div>
         </Card>
