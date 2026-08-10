@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useStore } from '@/store/useStore'
 import { CATEGORIES } from '@/lib/core/constants'
+import { GRADIENTS } from '@/lib/design-tokens'
 import { SERVICE_CATEGORIES, type VendorCategory } from '@/lib/core/types'
 
 // Mapeo de categorías a iconos Lucide
@@ -127,7 +128,7 @@ export function FilterBar() {
             className={clsx(
               `shrink-0 snap-start px-3 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 ${CHIP_TAP}`,
               filters.categoryOr
-                ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md'
+                ? `${GRADIENTS.chipActive} text-white shadow-md`
                 : 'bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200'
             )}
           >
