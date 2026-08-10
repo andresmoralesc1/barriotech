@@ -217,18 +217,18 @@ export function ClientDetailDrawer({
         role="dialog"
         aria-modal="true"
       >
-        <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
-          <h2 className="text-lg font-semibold text-slate-900">Detalle del cliente</h2>
+        <div className="sticky top-0 bg-white border-b border-stone-200 px-6 py-4 flex items-center justify-between z-10">
+          <h2 className="text-lg font-semibold text-stone-900">Detalle del cliente</h2>
           <button
             onClick={onClose}
-            className="text-slate-500 hover:text-slate-900 text-2xl leading-none"
+            className="text-stone-500 hover:text-stone-900 text-2xl leading-none"
             aria-label="Cerrar"
           >
             ×
           </button>
         </div>
 
-        {loading && <div className="p-12 text-center text-slate-500">Cargando…</div>}
+        {loading && <div className="p-12 text-center text-stone-500">Cargando…</div>}
         {error && <div className="p-6 text-red-700 text-sm">{error}</div>}
         {actionError && (
           <div className="mx-6 mt-4 p-3 bg-red-50 text-red-700 text-sm rounded">{actionError}</div>
@@ -241,8 +241,8 @@ export function ClientDetailDrawer({
                 {(client.name || client.email || '?').charAt(0).toUpperCase()}
               </div>
               <div>
-                <h3 className="text-xl font-bold text-slate-900">{client.name}</h3>
-                <p className="text-sm text-slate-500">{client.email ?? 'Sin email'}</p>
+                <h3 className="text-xl font-bold text-stone-900">{client.name}</h3>
+                <p className="text-sm text-stone-500">{client.email ?? 'Sin email'}</p>
               </div>
             </div>
 
@@ -269,8 +269,8 @@ export function ClientDetailDrawer({
               <Field label="Reseñas" value={String(client.stats.reviewCount)} />
             </Section>
 
-            <div className="border-t border-slate-200 pt-6 space-y-3">
-              <h4 className="font-semibold text-slate-900 text-sm">Acciones</h4>
+            <div className="border-t border-stone-200 pt-6 space-y-3">
+              <h4 className="font-semibold text-stone-900 text-sm">Acciones</h4>
 
               <button
                 onClick={() => doAction({ isActive: !client.isActive })}
@@ -295,9 +295,9 @@ export function ClientDetailDrawer({
               )}
             </div>
 
-            <div className="border-t border-slate-200 pt-6 space-y-3">
-              <h4 className="font-semibold text-slate-900 text-sm">Notas internas</h4>
-              <p className="text-xs text-slate-500">
+            <div className="border-t border-stone-200 pt-6 space-y-3">
+              <h4 className="font-semibold text-stone-900 text-sm">Notas internas</h4>
+              <p className="text-xs text-stone-500">
                 Anotaciones visibles para todos los administradores. No se muestran al cliente.
               </p>
 
@@ -308,10 +308,10 @@ export function ClientDetailDrawer({
                 rows={3}
                 maxLength={2000}
                 disabled={notePending}
-                className="w-full px-3 py-2 border border-slate-300 rounded text-sm resize-y focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                className="w-full px-3 py-2 border border-stone-300 rounded text-sm resize-y focus:outline-none focus:border-blue-500 disabled:opacity-50"
               />
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-stone-500">
                   {noteDraft.length} / 2000
                 </span>
                 <button
@@ -327,27 +327,27 @@ export function ClientDetailDrawer({
               )}
 
               {notesLoading && notes.length === 0 && (
-                <div className="text-slate-500 text-sm">Cargando notas…</div>
+                <div className="text-stone-500 text-sm">Cargando notas…</div>
               )}
               {!notesLoading && notes.length === 0 && (
-                <div className="text-slate-500 text-sm italic">Sin notas todavía.</div>
+                <div className="text-stone-500 text-sm italic">Sin notas todavía.</div>
               )}
               {notes.length > 0 && (
                 <ul className="space-y-2">
                   {notes.map((n) => (
                     <li
                       key={n.id}
-                      className="bg-slate-50 rounded p-3 text-sm border border-slate-200"
+                      className="bg-stone-50 rounded p-3 text-sm border border-stone-200"
                     >
                       <div className="flex justify-between items-start gap-2">
-                        <div className="text-xs text-slate-500">
-                          <span className="font-medium text-slate-700">
+                        <div className="text-xs text-stone-500">
+                          <span className="font-medium text-stone-700">
                             {n.author_name}
                           </span>
                           {n.author_email && (
-                            <span className="text-slate-400"> · {n.author_email}</span>
+                            <span className="text-stone-400"> · {n.author_email}</span>
                           )}
-                          <span className="text-slate-400">
+                          <span className="text-stone-400">
                             {' · '}
                             {new Date(n.created_at).toLocaleString('es-CO')}
                           </span>
@@ -361,7 +361,7 @@ export function ClientDetailDrawer({
                           {deletingNoteId === n.id ? '…' : 'Eliminar'}
                         </button>
                       </div>
-                      <p className="mt-1 text-slate-900 whitespace-pre-wrap break-words">
+                      <p className="mt-1 text-stone-900 whitespace-pre-wrap break-words">
                         {n.body}
                       </p>
                     </li>
@@ -379,8 +379,8 @@ export function ClientDetailDrawer({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h4 className="font-semibold text-slate-900 text-sm mb-2">{title}</h4>
-      <div className="bg-slate-50 rounded p-3 space-y-1 text-sm">{children}</div>
+      <h4 className="font-semibold text-stone-900 text-sm mb-2">{title}</h4>
+      <div className="bg-stone-50 rounded p-3 space-y-1 text-sm">{children}</div>
     </div>
   )
 }
@@ -388,8 +388,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Field({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div className="flex justify-between gap-2">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-slate-900 font-medium text-right">{value ?? '—'}</span>
+      <span className="text-stone-500">{label}</span>
+      <span className="text-stone-900 font-medium text-right">{value ?? '—'}</span>
     </div>
   )
 }

@@ -475,19 +475,19 @@ export function AdminPanel() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200">
+    <div className="min-h-screen bg-stone-50">
+      <header className="bg-white border-b border-stone-200">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-2xl">🛡️</span>
             <div>
-              <h1 className="text-xl font-bold text-slate-900">Admin</h1>
-              <p className="text-xs text-slate-500">BarrioTech</p>
+              <h1 className="text-xl font-bold text-stone-900">Admin</h1>
+              <p className="text-xs text-stone-500">BarrioTech</p>
             </div>
           </div>
           <button
             onClick={onLogout}
-            className="text-sm text-slate-600 hover:text-slate-900 px-3 py-1.5 rounded hover:bg-slate-100"
+            className="text-sm text-stone-600 hover:text-stone-900 px-3 py-1.5 rounded hover:bg-stone-100"
           >
             Cerrar sesión
           </button>
@@ -495,30 +495,30 @@ export function AdminPanel() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="bg-white rounded-lg border border-slate-200">
-          <div className="border-b border-slate-200 px-4">
+        <div className="bg-white rounded-lg border border-stone-200">
+          <div className="border-b border-stone-200 px-4">
             <nav className="flex gap-1 overflow-x-auto">
               <TabButton active={tab === 'overview'} onClick={() => onTabChange('overview')}>
                 Resumen
               </TabButton>
               <TabButton active={tab === 'vendors'} onClick={() => onTabChange('vendors')}>
                 Vendedores
-                <span className="ml-2 text-xs text-slate-500">({vendorsTotal})</span>
+                <span className="ml-2 text-xs text-stone-500">({vendorsTotal})</span>
               </TabButton>
               <TabButton active={tab === 'clients'} onClick={() => onTabChange('clients')}>
                 Clientes
-                <span className="ml-2 text-xs text-slate-500">({clientsTotal})</span>
+                <span className="ml-2 text-xs text-stone-500">({clientsTotal})</span>
               </TabButton>
               <TabButton active={tab === 'orders'} onClick={() => onTabChange('orders')}>
                 Pedidos
-                <span className="ml-2 text-xs text-slate-500">({ordersTotal})</span>
+                <span className="ml-2 text-xs text-stone-500">({ordersTotal})</span>
               </TabButton>
             </nav>
           </div>
 
           {/* Toolbar — only shown on the table-driven tabs (vendors/clients/orders) */}
           {(tab === 'vendors' || tab === 'clients' || tab === 'orders') && (
-            <div className="p-4 border-b border-slate-200 flex gap-3 items-center flex-wrap">
+            <div className="p-4 border-b border-stone-200 flex gap-3 items-center flex-wrap">
               {tab === 'orders' ? (
                 <>
                   <input
@@ -526,14 +526,14 @@ export function AdminPanel() {
                     placeholder="Buscar por comprador o vendedor…"
                     value={orderQuery}
                     onChange={(e) => setOrderQuery(e.target.value)}
-                    className="flex-1 min-w-[180px] px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 min-w-[180px] px-3 py-2 border border-stone-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <select
                     value={orderStatusFilter}
                     onChange={(e) =>
                       setOrderStatusFilter(e.target.value as typeof orderStatusFilter)
                     }
-                    className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="px-3 py-2 border border-stone-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="all">Todos los estados</option>
                     <option value="pending">Pendiente</option>
@@ -552,7 +552,7 @@ export function AdminPanel() {
                     aria-label="Pedidos desde"
                     value={orderSinceFilter}
                     onChange={(e) => setOrderSinceFilter(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="px-3 py-2 border border-stone-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     title="Desde (incl.)"
                   />
                   <input
@@ -560,7 +560,7 @@ export function AdminPanel() {
                     aria-label="Pedidos hasta"
                     value={orderUntilFilter}
                     onChange={(e) => setOrderUntilFilter(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="px-3 py-2 border border-stone-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     title="Hasta (excl.)"
                   />
                   {/* Tier 12: total range filter. Stored as strings for
@@ -577,7 +577,7 @@ export function AdminPanel() {
                     aria-label="Total mínimo"
                     value={orderMinTotal}
                     onChange={(e) => setOrderMinTotal(e.target.value)}
-                    className="w-32 px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-32 px-3 py-2 border border-stone-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     title="Total mínimo (COP)"
                   />
                   <input
@@ -589,7 +589,7 @@ export function AdminPanel() {
                     aria-label="Total máximo"
                     value={orderMaxTotal}
                     onChange={(e) => setOrderMaxTotal(e.target.value)}
-                    className="w-32 px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-32 px-3 py-2 border border-stone-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     title="Total máximo (COP)"
                   />
                   {/* Tier 13: master "Limpiar filtros" for the orders
@@ -607,7 +607,7 @@ export function AdminPanel() {
                       setOrderMinTotal('')
                       setOrderMaxTotal('')
                     }}
-                    className="text-xs text-slate-600 hover:text-slate-900 underline self-end pb-2"
+                    className="text-xs text-stone-600 hover:text-stone-900 underline self-end pb-2"
                   >
                     Limpiar filtros
                   </button>
@@ -621,12 +621,12 @@ export function AdminPanel() {
                     }
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    className="flex-1 min-w-[180px] px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 min-w-[180px] px-3 py-2 border border-stone-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <select
                     value={activeFilter}
                 onChange={(e) => setActiveFilter(e.target.value as 'all' | 'true' | 'false')}
-                className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border border-stone-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 title="Estado activo/inactivo"
               >
                 <option value="all">Todos</option>
@@ -640,7 +640,7 @@ export function AdminPanel() {
               <select
                 value={cityFilter}
                 onChange={(e) => setCityFilter(e.target.value)}
-                className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border border-stone-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 title="Ciudad"
               >
                 <option value="">Todas las ciudades</option>
@@ -666,7 +666,7 @@ export function AdminPanel() {
               <select
                 value={verifiedFilter}
                 onChange={(e) => setVerifiedFilter(e.target.value as 'all' | 'true' | 'false')}
-                className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border border-stone-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 title="Email verificado del propietario"
               >
                 <option value="all">Email verificado: todos</option>
@@ -680,7 +680,7 @@ export function AdminPanel() {
                 <select
                   value={withPhotoFilter}
                   onChange={(e) => setWithPhotoFilter(e.target.value as 'all' | 'true' | 'false')}
-                  className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="px-3 py-2 border border-stone-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   title="Vendedores con foto de perfil"
                 >
                   <option value="all">Con foto: todos</option>
@@ -688,22 +688,22 @@ export function AdminPanel() {
                   <option value="false">Sin foto</option>
                 </select>
               )}
-              <label className="flex items-center gap-1 text-sm text-slate-700" title="Alta desde">
-                <span className="text-slate-500">Desde</span>
+              <label className="flex items-center gap-1 text-sm text-stone-700" title="Alta desde">
+                <span className="text-stone-500">Desde</span>
                 <input
                   type="date"
                   value={sinceFilter}
                   onChange={(e) => setSinceFilter(e.target.value)}
-                  className="px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="px-2 py-1.5 border border-stone-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </label>
-              <label className="flex items-center gap-1 text-sm text-slate-700" title="Alta hasta (exclusivo)">
-                <span className="text-slate-500">Hasta</span>
+              <label className="flex items-center gap-1 text-sm text-stone-700" title="Alta hasta (exclusivo)">
+                <span className="text-stone-500">Hasta</span>
                 <input
                   type="date"
                   value={untilFilter}
                   onChange={(e) => setUntilFilter(e.target.value)}
-                  className="px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="px-2 py-1.5 border border-stone-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </label>
               {tab === 'vendors' && (
@@ -711,7 +711,7 @@ export function AdminPanel() {
                   className={`inline-flex items-center gap-2 px-3 py-2 border rounded text-sm cursor-pointer select-none ${
                     showTrash
                       ? 'bg-amber-50 border-amber-300 text-amber-900'
-                      : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                      : 'bg-white border-stone-300 text-stone-700 hover:bg-stone-50'
                   }`}
                   title="Mostrar también vendedores eliminados (papelera)"
                 >
@@ -730,7 +730,7 @@ export function AdminPanel() {
               <button
                 type="button"
                 onClick={onExportCsv}
-                className="inline-flex items-center gap-1 px-3 py-2 border border-slate-300 rounded text-sm text-slate-700 hover:bg-slate-50 hover:border-slate-400"
+                className="inline-flex items-center gap-1 px-3 py-2 border border-stone-300 rounded text-sm text-stone-700 hover:bg-stone-50 hover:border-stone-400"
                 title="Descarga los mismos filtros que ves en la tabla"
               >
                 <span aria-hidden="true">⬇</span> Exportar CSV
@@ -749,7 +749,7 @@ export function AdminPanel() {
               onNavigate={onNavigate}
             />
           ) : loading ? (
-            <div className="p-12 text-center text-slate-500">Cargando…</div>
+            <div className="p-12 text-center text-stone-500">Cargando…</div>
           ) : tab === 'vendors' ? (
             <>
               <VendorTable
@@ -899,7 +899,7 @@ function TabButton({
       className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
         active
           ? 'border-blue-600 text-blue-600'
-          : 'border-transparent text-slate-600 hover:text-slate-900'
+          : 'border-transparent text-stone-600 hover:text-stone-900'
       }`}
     >
       {children}
@@ -925,12 +925,12 @@ function VendorTable({
   onSelect: (id: string) => void
 }) {
   if (vendors.length === 0) {
-    return <div className="p-12 text-center text-slate-500">No se encontraron vendedores.</div>
+    return <div className="p-12 text-center text-stone-500">No se encontraron vendedores.</div>
   }
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="bg-slate-50 text-slate-600 text-left">
+        <thead className="bg-stone-50 text-stone-600 text-left">
           <tr>
             <th className="px-3 py-3 w-10">
               <input
@@ -963,12 +963,12 @@ function VendorTable({
               <tr
                 key={v.id}
                 onClick={() => onSelect(v.id)}
-                className={`border-t border-slate-100 cursor-pointer ${
+                className={`border-t border-stone-100 cursor-pointer ${
                   isSelected
                     ? 'bg-blue-50/50 hover:bg-blue-50'
                     : isDeleted
                       ? 'bg-amber-50/40 hover:bg-amber-50/60'
-                      : 'hover:bg-slate-50'
+                      : 'hover:bg-stone-50'
                 }`}
               >
                 <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
@@ -989,19 +989,19 @@ function VendorTable({
                         className={`w-8 h-8 rounded-full object-cover ${isDeleted ? 'opacity-50 grayscale' : ''}`}
                       />
                     ) : (
-                      <div className={`w-8 h-8 rounded-full ${isDeleted ? 'bg-amber-100' : 'bg-slate-200'}`} />
+                      <div className={`w-8 h-8 rounded-full ${isDeleted ? 'bg-amber-100' : 'bg-stone-200'}`} />
                     )}
                     <div>
-                      <div className={`font-medium ${isDeleted ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
+                      <div className={`font-medium ${isDeleted ? 'text-stone-500 line-through' : 'text-stone-900'}`}>
                         {v.name}
                       </div>
-                      <div className="text-xs text-slate-500">{v.owner.name}</div>
+                      <div className="text-xs text-stone-500">{v.owner.name}</div>
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-slate-700">{v.category ?? '—'}</td>
-                <td className="px-4 py-3 text-slate-700">{v.cityId ?? '—'}</td>
-                <td className="px-4 py-3 text-slate-700">
+                <td className="px-4 py-3 text-stone-700">{v.category ?? '—'}</td>
+                <td className="px-4 py-3 text-stone-700">{v.cityId ?? '—'}</td>
+                <td className="px-4 py-3 text-stone-700">
                   {v.owner.email ?? '—'}
                   {!v.owner.emailVerified && (
                     <span className="ml-1 text-xs text-amber-600">(sin verificar)</span>
@@ -1019,7 +1019,7 @@ function VendorTable({
                     <StatusBadge active={v.isActive} />
                   )}
                 </td>
-                <td className="px-4 py-3 text-slate-500 text-xs">
+                <td className="px-4 py-3 text-stone-500 text-xs">
                   {new Date(v.createdAt).toLocaleDateString('es-CO')}
                 </td>
               </tr>
@@ -1049,12 +1049,12 @@ function ClientTable({
   onSelect: (id: string) => void
 }) {
   if (clients.length === 0) {
-    return <div className="p-12 text-center text-slate-500">No se encontraron clientes.</div>
+    return <div className="p-12 text-center text-stone-500">No se encontraron clientes.</div>
   }
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="bg-slate-50 text-slate-600 text-left">
+        <thead className="bg-stone-50 text-stone-600 text-left">
           <tr>
             <th className="px-3 py-3 w-10">
               <input
@@ -1083,8 +1083,8 @@ function ClientTable({
               <tr
                 key={c.id}
                 onClick={() => onSelect(c.id)}
-                className={`border-t border-slate-100 cursor-pointer ${
-                  isSelected ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-slate-50'
+                className={`border-t border-stone-100 cursor-pointer ${
+                  isSelected ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-stone-50'
                 }`}
               >
                 <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
@@ -1096,19 +1096,19 @@ function ClientTable({
                     className="w-4 h-4 cursor-pointer"
                   />
                 </td>
-                <td className="px-4 py-3 font-medium text-slate-900">{c.name}</td>
-                <td className="px-4 py-3 text-slate-700">
+                <td className="px-4 py-3 font-medium text-stone-900">{c.name}</td>
+                <td className="px-4 py-3 text-stone-700">
                   {c.email ?? '—'}
                   {!c.emailVerified && (
                     <span className="ml-1 text-xs text-amber-600">(sin verificar)</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-slate-700">{c.phone ?? '—'}</td>
-                <td className="px-4 py-3 text-slate-700">{c.cityId ?? '—'}</td>
+                <td className="px-4 py-3 text-stone-700">{c.phone ?? '—'}</td>
+                <td className="px-4 py-3 text-stone-700">{c.cityId ?? '—'}</td>
                 <td className="px-4 py-3">
                   <StatusBadge active={c.isActive} />
                 </td>
-                <td className="px-4 py-3 text-slate-500 text-xs">
+                <td className="px-4 py-3 text-stone-500 text-xs">
                   {c.lastLoginAt ? new Date(c.lastLoginAt).toLocaleDateString('es-CO') : 'Nunca'}
                 </td>
               </tr>
@@ -1124,7 +1124,7 @@ function StatusBadge({ active }: { active: boolean }) {
   return (
     <span
       className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-        active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
+        active ? 'bg-green-100 text-green-700' : 'bg-stone-100 text-stone-600'
       }`}
     >
       {active ? 'Activo' : 'Inactivo'}
@@ -1159,7 +1159,7 @@ function OrderTable({
 }) {
   if (orders.length === 0) {
     return (
-      <div className="p-12 text-center text-slate-500">
+      <div className="p-12 text-center text-stone-500">
         No hay pedidos con los filtros actuales.
       </div>
     )
@@ -1167,7 +1167,7 @@ function OrderTable({
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+        <thead className="bg-stone-50 text-left text-xs uppercase text-stone-500">
           <tr>
             <th className="px-3 py-2">Fecha</th>
             <th className="px-3 py-2">Comprador</th>
@@ -1182,9 +1182,9 @@ function OrderTable({
             <tr
               key={o.id}
               onClick={() => onSelect(o.id)}
-              className="border-t border-slate-200 cursor-pointer hover:bg-slate-50"
+              className="border-t border-stone-200 cursor-pointer hover:bg-stone-50"
             >
-              <td className="px-3 py-2 text-slate-600">
+              <td className="px-3 py-2 text-stone-600">
                 {new Date(o.createdAt).toLocaleString('es-CO', {
                   year: 'numeric',
                   month: 'short',
@@ -1194,12 +1194,12 @@ function OrderTable({
                 })}
               </td>
               <td className="px-3 py-2">
-                <div className="font-medium text-slate-900">{o.buyer.name}</div>
-                <div className="text-xs text-slate-500">{o.buyer.email ?? '—'}</div>
+                <div className="font-medium text-stone-900">{o.buyer.name}</div>
+                <div className="text-xs text-stone-500">{o.buyer.email ?? '—'}</div>
               </td>
               <td className="px-3 py-2">
-                <div className="font-medium text-slate-900">{o.vendor.name}</div>
-                <div className="text-xs text-slate-500">{o.vendor.slug}</div>
+                <div className="font-medium text-stone-900">{o.vendor.name}</div>
+                <div className="text-xs text-stone-500">{o.vendor.slug}</div>
               </td>
               <td className="px-3 py-2 text-right tabular-nums">{o.itemCount}</td>
               <td className="px-3 py-2 text-right tabular-nums font-medium">
@@ -1266,14 +1266,14 @@ function PaginationBar({
   // Don't render anything when there's nothing to paginate.
   if (total === 0) {
     return (
-      <div className="px-4 py-3 border-t border-slate-200 text-xs text-slate-500 text-center">
+      <div className="px-4 py-3 border-t border-stone-200 text-xs text-stone-500 text-center">
         Sin resultados
       </div>
     )
   }
   if (totalPages === 1) {
     return (
-      <div className="px-4 py-3 border-t border-slate-200 text-xs text-slate-500 text-center">
+      <div className="px-4 py-3 border-t border-stone-200 text-xs text-stone-500 text-center">
         {total} resultado{total === 1 ? '' : 's'}
       </div>
     )
@@ -1289,9 +1289,9 @@ function PaginationBar({
   return (
     <nav
       aria-label="Paginación"
-      className="px-4 py-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3"
+      className="px-4 py-3 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-3"
     >
-      <span className="text-xs text-slate-600">
+      <span className="text-xs text-stone-600">
         Mostrando <strong>{first}–{last}</strong> de <strong>{total}</strong>
       </span>
       <div className="flex items-center gap-1">
@@ -1304,7 +1304,7 @@ function PaginationBar({
         </PageBtn>
         {pageNumbers.map((p, i) =>
           p === '…' ? (
-            <span key={`gap-${i}`} className="px-2 text-slate-400" aria-hidden="true">
+            <span key={`gap-${i}`} className="px-2 text-stone-400" aria-hidden="true">
               …
             </span>
           ) : (
@@ -1348,8 +1348,8 @@ function PageBtn({
   const tone = active
     ? 'bg-blue-600 text-white'
     : disabled
-      ? 'text-slate-300 cursor-not-allowed'
-      : 'text-slate-700 hover:bg-slate-100'
+      ? 'text-stone-300 cursor-not-allowed'
+      : 'text-stone-700 hover:bg-stone-100'
   return (
     <button
       type="button"
@@ -1402,7 +1402,7 @@ function BatchActionBar({
     <div
       role="region"
       aria-label="Acciones por lote"
-      className="fixed bottom-4 inset-x-4 md:inset-x-auto md:right-6 md:max-w-2xl bg-slate-900 text-white rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 z-40"
+      className="fixed bottom-4 inset-x-4 md:inset-x-auto md:right-6 md:max-w-2xl bg-stone-900 text-white rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 z-40"
     >
       <span className="text-sm font-medium">
         {count} seleccionado{count === 1 ? '' : 's'}
@@ -1416,7 +1416,7 @@ function BatchActionBar({
       <button
         onClick={onClear}
         disabled={pending}
-        className="px-3 py-1.5 text-sm rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50"
+        className="px-3 py-1.5 text-sm rounded bg-stone-700 hover:bg-stone-600 disabled:opacity-50"
       >
         Limpiar
       </button>
@@ -1508,15 +1508,15 @@ function BatchConfirmModal({
         aria-labelledby="batch-confirm-title"
         className="bg-white rounded-xl shadow-xl max-w-md w-full p-6"
       >
-        <h3 id="batch-confirm-title" className="text-lg font-semibold text-slate-900">
+        <h3 id="batch-confirm-title" className="text-lg font-semibold text-stone-900">
           {l.title}
         </h3>
-        <p className="mt-2 text-sm text-slate-600">{l.body}</p>
+        <p className="mt-2 text-sm text-stone-600">{l.body}</p>
         <div className="mt-6 flex justify-end gap-2">
           <button
             onClick={onCancel}
             disabled={pending}
-            className="px-4 py-2 text-sm rounded border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="px-4 py-2 text-sm rounded border border-stone-300 text-stone-700 hover:bg-stone-50 disabled:opacity-50"
           >
             Cancelar
           </button>

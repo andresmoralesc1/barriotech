@@ -315,7 +315,7 @@ export function DashboardContent() {
         {/* Header */}
         <header className="bg-white shadow-sm p-4 flex items-center justify-between sticky top-0 z-10">
           <div>
-            <h1 className="text-xl font-bold flex items-center gap-2">
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
               Mi panel
               <Badge variant="primary">Vendedor</Badge>
             </h1>

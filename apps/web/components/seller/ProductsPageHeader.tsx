@@ -38,7 +38,7 @@ export function ProductsPageHeader({ onBack, productCount, hiddenCount = 0, isSe
         <ChevronLeft size={20} />
       </Button>
       <div className="flex-1 min-w-0">
-        <h1 className="text-xl font-bold">
+        <h1 className="text-3xl font-bold tracking-tight">
           {isServiceCategory ? 'Mis Productos y Servicios' : 'Mis Productos'}
         </h1>
         <p className="text-sm text-gray-500 flex flex-wrap items-center gap-x-2 gap-y-0.5">
