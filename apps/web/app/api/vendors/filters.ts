@@ -10,6 +10,10 @@
 
 export interface VendorFilters {
   category: string | null
+  // Phase F3: "Servicios" group chip — list of service category
+  // ids (mutually exclusive with `category`). SQL IN clause via
+  // bound placeholders so no injection vector exists.
+  categoryOr: string[] | null
   active: string | null
   withLocation: boolean
   cityId: string | null
@@ -41,8 +45,25 @@ export function parseVendorFilters(searchParams: URLSearchParams): VendorFilters
     rawModality === 'on_site' || rawModality === 'travels' || rawModality === 'remote'
       ? rawModality
       : null
+
+  // Phase F3: parse `categoryOr` as a comma-separated list of category
+  // ids. Filter against the canonical SERVICE_CATEGORIES so a
+  // malicious client can't send junk values (which would 500 in the
+  // SQL `IN (...)` clause). Dedupe + drop empties.
+  const ALLOWED_SERVICE_CATEGORIES = ['clases','bienestar','belleza','hogar','eventos']
+  const rawCategoryOr = searchParams.get('categoryOr')
+  let categoryOr: string[] | null = null
+  if (rawCategoryOr) {
+    const requested = rawCategoryOr
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => ALLOWED_SERVICE_CATEGORIES.includes(s))
+    categoryOr = requested.length > 0 ? Array.from(new Set(requested)) : null
+  }
+
   return {
     category: searchParams.get('category'),
+    categoryOr,
     active: searchParams.get('active'),
     withLocation: searchParams.get('withLocation') === 'true',
     cityId: searchParams.get('cityId'),
@@ -83,6 +104,15 @@ export function buildVendorWhereClause(filters: VendorFilters, startAt = 1): Whe
     w.push(`AND v.category = $${i}`)
     a.push(filters.category)
     i++
+  }
+  if (filters.categoryOr && filters.categoryOr.length > 0) {
+    // Phase F3: "Servicios" group chip. IN clause with $i placeholders
+    // for each id. The list was already validated against
+    // SERVICE_CATEGORIES in parseVendorFilters so SQL injection
+    // vectors are bounded.
+    const placeholders = filters.categoryOr.map(() => `$${i++}`).join(',')
+    w.push(`AND v.category IN (${placeholders})`)
+    a.push(...filters.categoryOr)
   }
   if (filters.active === 'true') {
     // SPRINT 11 B-AUTH-3 (2026-07-24): reverted the GPS-004 location_fresh

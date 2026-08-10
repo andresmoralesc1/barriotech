@@ -1,7 +1,7 @@
 'use client'
 
 import { clsx } from 'clsx'
-import { Search, X, Home } from 'lucide-react'
+import { Search, X, Home, Sparkles } from 'lucide-react'
 import {
   Apple,
   UtensilsCrossed,
@@ -10,7 +10,7 @@ import {
   Shirt,
   Package,
   GraduationCap,
-  Sparkles,
+  Sparkles as SparklesIcon,
   Scissors,
   Wrench,
   PartyPopper,
@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { useStore } from '@/store/useStore'
 import { CATEGORIES } from '@/lib/core/constants'
-import type { VendorCategory } from '@/lib/core/types'
+import { SERVICE_CATEGORIES, type VendorCategory } from '@/lib/core/types'
 
 // Mapeo de categorías a iconos Lucide
 const CategoryIconMap: Record<VendorCategory, typeof Apple> = {
@@ -55,10 +55,21 @@ export function FilterBar() {
   const filters = useStore((s) => s.filters)
   const setFilters = useStore((s) => s.setFilters)
 
-  const hasActiveFilters = filters.category !== null || filters.maxDistanceMeters !== null || filters.searchQuery !== '' || filters.modality !== null
+  const hasActiveFilters =
+    filters.category !== null ||
+    !!filters.categoryOr ||
+    filters.maxDistanceMeters !== null ||
+    filters.searchQuery !== '' ||
+    filters.modality !== null
 
   const clearFilters = () => {
-    setFilters({ category: null, maxDistanceMeters: null, searchQuery: '', modality: null })
+    setFilters({
+      category: null,
+      categoryOr: null,
+      maxDistanceMeters: null,
+      searchQuery: '',
+      modality: null,
+    })
   }
 
   return (
@@ -87,29 +98,68 @@ export function FilterBar() {
       <div className="relative">
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden snap-x snap-mandatory">
           <button
-            onClick={() => setFilters({ category: null })}
+            onClick={() => {
+              setFilters({ category: null, categoryOr: null })
+            }}
             className={clsx(
               `shrink-0 snap-start px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${CHIP_TAP}`,
-              filters.category === null
+              filters.category === null && !filters.categoryOr
                 ? 'bg-primary text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             )}
           >
             Todos
           </button>
+          {/* Phase F3: "Servicios" group chip — toggles all 5 service
+              categories at once. Mutually exclusive with the
+              individual category chips below (clicking one clears
+              categoryOr). Saves the buyer 5 clicks when they just
+              want to see "any service nearby". */}
+          <button
+            onClick={() => {
+              if (filters.categoryOr) {
+                setFilters({ categoryOr: null })
+              } else {
+                setFilters({ category: null, categoryOr: [...SERVICE_CATEGORIES] })
+              }
+            }}
+            aria-pressed={!!filters.categoryOr}
+            className={clsx(
+              `shrink-0 snap-start px-3 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 ${CHIP_TAP}`,
+              filters.categoryOr
+                ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md'
+                : 'bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200'
+            )}
+          >
+            <Sparkles size={14} aria-hidden="true" />
+            Servicios
+          </button>
           {CATEGORIES.map((cat) => {
             const IconComponent = CategoryIconMap[cat.id]
+            // Phase F3: disable individual category chips when the
+            // "Servicios" group chip is active — they're
+            // sub-categories of that group, so picking one would
+            // be confusing. Visual treatment: muted background +
+            // "Subsumed" hover title.
+            const subsumed = !!filters.categoryOr
             return (
               <button
                 key={cat.id}
-                onClick={() => setFilters({ category: cat.id as VendorCategory })}
+                onClick={() => {
+                  if (subsumed) return
+                  setFilters({ category: cat.id as VendorCategory, categoryOr: null })
+                }}
                 className={clsx(
                   `shrink-0 snap-start px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${CHIP_TAP}`,
-                  filters.category === cat.id
+                  filters.category === cat.id && !subsumed
                     ? 'text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    : subsumed
+                      ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 )}
-                style={filters.category === cat.id ? { background: cat.color } : {}}
+                style={filters.category === cat.id && !subsumed ? { background: cat.color } : {}}
+                disabled={subsumed}
+                title={subsumed ? 'Activo bajo "Servicios" — desactívalo para filtrar por categoría' : undefined}
               >
                 <IconComponent size={16} />
                 {cat.label}

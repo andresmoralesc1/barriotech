@@ -17,6 +17,12 @@ export interface User {
 
 interface Filters {
   category: VendorCategory | null
+  // Phase F3: "Servicios" group chip. When set to the 5 service
+  // category ids, vendors matching ANY of them are shown (an IN
+  // clause). Mutually exclusive with `category` from the API's
+  // perspective — when `categoryOr` is non-empty the individual
+  // category chips in the FilterBar become inactive.
+  categoryOr: string[] | null
   // null = sin límite (mostrar todos). Número = filtrar hasta esa distancia en metros.
   maxDistanceMeters: number | null
   searchQuery: string
@@ -162,6 +168,7 @@ export const useStore = create<AppState>()(
       // Filtros
       filters: {
         category: null,
+        categoryOr: null,
         maxDistanceMeters: null,
         searchQuery: '',
         modality: null,

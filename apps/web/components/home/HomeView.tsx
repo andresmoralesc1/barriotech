@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { MapPin, Users, TrendingUp, Star, ArrowRight, Clock, Shield, Zap, Quote } from 'lucide-react'
+import { MapPin, Users, TrendingUp, Star, ArrowRight, Clock, Shield, Zap, Quote, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useEffect, useState } from 'react'
 
@@ -128,6 +128,21 @@ export function HomeView() {
                 </Button>
               </Link>
             </div>
+            {/* Phase F4: secondary service-discovery CTA. The primary
+                hero CTAs ("Ver mapa" / "Publicar mi negocio") are
+                product-flavored; this third chip surfaces the
+                service-categories feature launched in migration 102
+                (clases, bienestar, belleza, hogar, eventos). It's
+                white-text on the dark hero overlay so it doesn't
+                compete with the primary actions above. */}
+            <Link
+              href="/servicios"
+              className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-white/80 hover:text-white underline underline-offset-4 decoration-white/40"
+            >
+              <Sparkles size={14} aria-hidden="true" />
+              ¿Buscas clases, masajes o peluquería a domicilio?
+              <ArrowRight size={14} aria-hidden="true" />
+            </Link>
           </div>
         </div>
         {/* Wave */}

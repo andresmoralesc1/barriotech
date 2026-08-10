@@ -244,6 +244,15 @@ export function MapView() {
       if (filters.modality) {
         params.set('modality', filters.modality)
       }
+      // Phase F3: "Servicios" group chip — sends a comma-separated list
+      // of category ids (clases,bienestar,belleza,hogar,eventos).
+      // The API parses + validates against SERVICE_CATEGORIES so a
+      // malicious client can't inject. When the group is off, this
+      // block is skipped and the request shape is unchanged from
+      // before this commit.
+      if (filters.categoryOr && filters.categoryOr.length > 0) {
+        params.set('categoryOr', filters.categoryOr.join(','))
+      }
       // Phase D1: send the search query to the server. The server
       // matches against vendor.name + description + active product
       // names. Empty / whitespace-only inputs are dropped server-side.
@@ -269,7 +278,7 @@ export function MapView() {
       console.error('Failed to fetch vendors:', err)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCity.id, hasRealGeolocation, filters.modality])
+  }, [selectedCity.id, hasRealGeolocation, filters.modality, filters.categoryOr])
 
   // MAP-005: when SSE delivers a per-vendor update, patch the existing entry
   // in place — do NOT rebuild the array. This is the key fix for the
