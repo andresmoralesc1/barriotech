@@ -45,6 +45,20 @@ export async function GET(req: NextRequest) {
 
   const url = new URL(req.url)
   const cityId = url.searchParams.get('cityId')
+  // Phase L8: support a category filter on the admin vendor list.
+  // The "Servicios" virtual option sends the comma-separated 5 service
+  // category ids so the admin can filter to "all service vendors"
+  // without picking one at a time. The query uses ANY (v.category =
+  // ANY(...)) which Postgres resolves to an IN-clause under the hood.
+  const categoryParam = url.searchParams.get('category')
+  const ALLOWED_CATEGORIES = [
+    'frutas','comida','bebidas','artesanias','ropa','otros',
+    'clases','bienestar','belleza','hogar','eventos',
+  ]
+  const requestedCategories = (categoryParam ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => ALLOWED_CATEGORIES.includes(s))
   const active = url.searchParams.get('active')
   const q = url.searchParams.get('q')?.trim()
   const verified = url.searchParams.get('verified')
@@ -69,6 +83,16 @@ export async function GET(req: NextRequest) {
   if (cityId) {
     params.push(cityId)
     conditions.push(`v.city_id = $${params.length}`)
+  }
+  // Phase L8: category filter. `category=Servicios` → all 5 service
+  // category ids (the virtual "Servicios" group). `category=clases`
+  // → that single category. Comma-separated multi-value supported.
+  // The values were validated against the ALLOWED_CATEGORIES
+  // allowlist at parse time so the SQL is bound to safe strings.
+  if (requestedCategories.length > 0) {
+    const placeholders = requestedCategories.map((_, i) => `$${params.length + i}`).join(',')
+    for (const c of requestedCategories) params.push(c)
+    conditions.push(`v.category IN (${placeholders})`)
   }
   if (active === 'true') conditions.push('v.is_active = true')
   else if (active === 'false') conditions.push('v.is_active = false')

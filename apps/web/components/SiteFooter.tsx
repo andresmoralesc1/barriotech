@@ -36,6 +36,11 @@ export function SiteFooter() {
             <h3 className="text-white font-semibold text-sm mb-4 uppercase tracking-wider">Explorar</h3>
             <ul className="space-y-1">
               <li><Link href="/map" className="text-sm hover:text-primary-400 transition-colors inline-block py-2 min-h-[36px]">Mapa de vendedores</Link></li>
+              {/* Phase L8: services are off the map; the dedicated
+                  browse page is the entry point. Sits next to the
+                  map link because they're complementary entry
+                  points (geo vs catalog). */}
+              <li><Link href="/servicios" className="text-sm hover:text-primary-400 transition-colors inline-block py-2 min-h-[36px]">Servicios</Link></li>
               <li><Link href="/register" className="text-sm hover:text-primary-400 transition-colors inline-block py-2 min-h-[36px]">Ser vendedor</Link></li>
               <li><Link href="/login" className="text-sm hover:text-primary-400 transition-colors inline-block py-2 min-h-[36px]">Iniciar sesión</Link></li>
             </ul>

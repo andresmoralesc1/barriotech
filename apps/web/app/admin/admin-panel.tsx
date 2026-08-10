@@ -20,6 +20,7 @@ import { VendorDetailDrawer } from './vendor-detail-drawer'
 import { ClientDetailDrawer } from './client-detail-drawer'
 import { OrderDetailDrawer } from './order-detail-drawer'
 import { DashboardOverview } from './dashboard-overview'
+import { CATEGORIES } from '@/lib/core/constants/categories'
 
 type Tab = 'overview' | 'vendors' | 'clients' | 'orders'
 
@@ -92,6 +93,11 @@ export function AdminPanel() {
   const [withPhotoFilter, setWithPhotoFilter] = useState<'all' | 'true' | 'false'>('all')
   const [sinceFilter, setSinceFilter] = useState('') // YYYY-MM-DD
   const [untilFilter, setUntilFilter] = useState('') // YYYY-MM-DD
+  // Phase L8: category filter on the admin vendor list. Special
+  // value "Servicios" expands to the 5 service category ids at
+  // the API level so the admin can pick "all service vendors"
+  // without manually picking each one. Empty string = no filter.
+  const [categoryFilter, setCategoryFilter] = useState<string>('')
   // Papelera toggle (vendors-only) — when on, list includes soft-deleted.
   const [showTrash, setShowTrash] = useState(false)
   // Pagination — offset is reset to 0 whenever filters/tab change so the
@@ -166,6 +172,11 @@ export function AdminPanel() {
     if (untilFilter) params.set('until', untilFilter)
     if (showTrash) params.set('includeDeleted', 'true')
     if (query.trim()) params.set('q', query.trim())
+    // Phase L8: category filter. "Servicios" expands to the 5
+    // service category ids on the server side; an individual id
+    // passes through. The server validates against the canonical
+    // ALLOWED_CATEGORIES allowlist.
+    if (categoryFilter) params.set('category', categoryFilter)
     const res = await fetch(`/api/admin/vendors?${params}`)
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
@@ -177,7 +188,7 @@ export function AdminPanel() {
     setVendors(data.vendors)
     setVendorsTotal(data.total)
     setLoading(false)
-  }, [activeFilter, cityFilter, verifiedFilter, withPhotoFilter, sinceFilter, untilFilter, showTrash, query, offset])
+  }, [activeFilter, cityFilter, verifiedFilter, withPhotoFilter, sinceFilter, untilFilter, showTrash, query, categoryFilter, offset])
 
   const fetchClients = useCallback(async () => {
     setLoading(true)
@@ -662,6 +673,26 @@ export function AdminPanel() {
                 <option value="sincelejo">Sincelejo</option>
                 <option value="tunja">Tunja</option>
                 <option value="riohacha">Riohacha</option>
+              </select>
+              {/* Phase L8: category dropdown. "Servicios" is a virtual
+                  group that expands to the 5 service category ids
+                  server-side; the other 11 options pass through as a
+                  single id. The full 12-option list is long but the
+                  toolbar is wrapped in flex-wrap so it stays usable
+                  on a narrow admin viewport. */}
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="px-3 py-2 border border-stone-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title="Categoría"
+              >
+                <option value="">Todas las categorías</option>
+                <option value="Servicios">Servicios (clases, bienestar, belleza, hogar, eventos)</option>
+                {CATEGORIES.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
               </select>
               <select
                 value={verifiedFilter}
