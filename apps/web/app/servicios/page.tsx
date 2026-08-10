@@ -108,7 +108,26 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 }
 
-export default async function ServicesIndexPage() {
+export default async function ServicesIndexPage({
+  searchParams,
+}: {
+  // Phase URL sharing: the page reads `?city`, `?cat`, and
+  // `?travels` from the URL so a buyer can share a filtered
+  // view (e.g. "Clases en Medellín a domicilio"). The
+  // values are passed to the client island as `initial*`
+  // props — the island re-syncs the URL on filter change via
+  // router.replace (no scroll, no history entry).
+  searchParams: Promise<{
+    city?: string
+    cat?: string
+    travels?: string
+  }>
+}) {
+  const params = await searchParams
+  const initialCityId = params.city ?? null
+  const initialCategories = params.cat ? params.cat.split(',').filter(Boolean) : []
+  const initialTravelsOnly = params.travels === '1'
+
   // Phase pivot: services are no longer on the map. This page is
   // the primary discovery surface for them. We fetch the active
   // service vendors server-side (the table is small — even with
@@ -164,7 +183,12 @@ export default async function ServicesIndexPage() {
       </section>
 
       {/* Browse by city — client component with the vendor list. */}
-      <ServicesBrowse vendors={vendors} />
+      <ServicesBrowse
+        vendors={vendors}
+        initialCityId={initialCityId}
+        initialCategories={initialCategories}
+        initialTravelsOnly={initialTravelsOnly}
+      />
     </main>
   )
 }

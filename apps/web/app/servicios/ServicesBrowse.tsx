@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { getCategoryInfo } from '@/lib/core/constants/categories'
 import { COLOMBIA_CITIES, getCityById } from '@/lib/core/constants/cities'
 import { SERVICE_CATEGORIES, isServiceCategory, type VendorCategory } from '@/lib/core/types'
@@ -23,6 +24,13 @@ type ServiceListing = {
 
 interface Props {
   vendors: ServiceListing[]
+  // URL sharing initial state. The page reads these from
+  // `?city=&cat=&travels=` and passes them in as initial
+  // values so a shared URL rehydrates the same filter state
+  // on the client.
+  initialCityId?: string | null
+  initialCategories?: string[]
+  initialTravelsOnly?: boolean
 }
 
 /**
@@ -44,10 +52,31 @@ interface Props {
  * "Reservar" CTA in VendorProducts.tsx so the seller gets
  * the same request regardless of where the buyer tapped from.
  */
-export function ServicesBrowse({ vendors }: Props) {
-  const [cityId, setCityId] = useState<string | null>(null)
-  const [categories, setCategories] = useState<string[]>([])
-  const [travelsOnly, setTravelsOnly] = useState(false)
+export function ServicesBrowse({
+  vendors,
+  initialCityId = null,
+  initialCategories = [],
+  initialTravelsOnly = false,
+}: Props) {
+  const router = useRouter()
+  const [cityId, setCityId] = useState<string | null>(initialCityId)
+  const [categories, setCategories] = useState<string[]>(initialCategories)
+  const [travelsOnly, setTravelsOnly] = useState(initialTravelsOnly)
+
+  // Phase URL sharing: every filter change syncs the URL via
+  // `router.replace`. We use replace (not push) so the buyer's
+  // back button still works as expected — a filter is a view
+  // state, not a navigation. `scroll: false` keeps the page
+  // from jumping to the top on every category toggle.
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (cityId) params.set('city', cityId)
+    if (categories.length > 0) params.set('cat', categories.join(','))
+    if (travelsOnly) params.set('travels', '1')
+    const qs = params.toString()
+    const url = qs ? `/servicios?${qs}` : '/servicios'
+    router.replace(url, { scroll: false })
+  }, [cityId, categories, travelsOnly, router])
 
   const filtered = useMemo(() => {
     return vendors.filter((v) => {
