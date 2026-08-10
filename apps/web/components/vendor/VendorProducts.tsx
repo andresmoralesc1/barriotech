@@ -16,10 +16,19 @@ interface VendorProductsProps {
   user?: UserType | null
   /** N12: extra photos per product id */
   extraPhotos?: Record<string, string[]>
+  // Phase G5: vendor identity is forwarded into ProductCard so the
+  // "Reservar" button on service offerings can open WhatsApp
+  // directly to the right number with a pre-filled message.
+  vendor?: { name: string; phone: string | null | undefined } | null
 }
 
-export function VendorProducts({ products, onAddToCart, compact, user, extraPhotos }: VendorProductsProps) {
+export function VendorProducts({ products, onAddToCart, compact, user, extraPhotos, vendor }: VendorProductsProps) {
   const router = useRouter()
+  // vendorForReservation is the projection ProductCard reads. Keeping
+  // it at this level (rather than inside ProductCard) means a future
+  // refactor that adds a vendor prop per-card (e.g. multi-vendor
+  // grids) is a one-liner.
+  const vendorForReservation = vendor
 
   // Migration 102: derive whether any offerings on display are services
   // so the section header + empty-state copy can flip.
@@ -46,6 +55,7 @@ export function VendorProducts({ products, onAddToCart, compact, user, extraPhot
             product={product}
             compact={compact}
             onAddToCart={onAddToCart}
+            vendor={vendorForReservation}
             user={user}
             router={router}
             extraPhotos={extraPhotos?.[product.id]}
@@ -60,12 +70,20 @@ interface ProductCardProps {
   product: Product
   compact?: boolean
   onAddToCart?: (product: Product) => void
+  // Phase G5: vendor context for service flow. When the buyer taps
+  // "Reservar" on a service offering, the click opens WhatsApp
+  // directly to the vendor with a pre-filled availability
+  // request — no cart, no checkout, no `/api/orders` round-trip.
+  // We carry vendor.name + vendor.phone through the prop so the
+  // WhatsApp message reads naturally ("Hola <vendor>! Quiero
+  // reservar ...") and the wa.me link targets the right number.
+  vendor?: { name: string; phone: string | null | undefined } | null
   user?: UserType | null
   router: ReturnType<typeof useRouter>
   extraPhotos?: string[]
 }
 
-function ProductCard({ product, compact, onAddToCart, user, router, extraPhotos }: ProductCardProps) {
+function ProductCard({ product, compact, onAddToCart, vendor, user, router, extraPhotos }: ProductCardProps) {
   const [imgFailed, setImgFailed] = useState(false)
   const [photoIdx, setPhotoIdx] = useState(0)
   const [expanded, setExpanded] = useState(false)
@@ -174,7 +192,39 @@ function ProductCard({ product, compact, onAddToCart, user, router, extraPhotos 
           {onAddToCart ? (
             user ? (
               <button
-                onClick={() => onAddToCart(product)}
+                onClick={() => {
+                  if (product.kind === 'service' && vendor && vendor.phone) {
+                    const parts: string[] = []
+                    parts.push(`¡Hola ${vendor.name}!`)
+                    parts.push(`Quiero reservar: ${product.name}.`)
+                    if (product.durationMinutes) {
+                      const mins = product.durationMinutes
+                      const dur = mins < 60
+                        ? `${mins} min`
+                        : `${Math.round(mins / 6) / 10} h`
+                      parts.push(`Duración: ${dur}.`)
+                    }
+                    if (product.modality === 'travels') {
+                      parts.push('Modalidad: a domicilio.')
+                    } else if (product.modality === 'remote') {
+                      parts.push('Modalidad: en línea.')
+                    } else if (product.modality === 'on_site') {
+                      parts.push('Modalidad: en tu local.')
+                    }
+                    if (product.description) {
+                      parts.push(`Notas: ${product.description}`)
+                    }
+                    parts.push('¿Qué fechas y horarios tienes disponibles?')
+                    const text = encodeURIComponent(parts.join('\n'))
+                    window.open(
+                      `https://wa.me/${vendor.phone.replace(/\D/g, '')}?text=${text}`,
+                      '_blank',
+                      'noopener,noreferrer',
+                    )
+                    return
+                  }
+                  onAddToCart(product)
+                }}
                 className="p-2 bg-primary text-white rounded-full hover:bg-primary-600 transition-colors flex-shrink-0"
                 // Migration 102 Phase D2: copy flips to "Reservar"
                 // for service offerings (clases/masajes/etc.). The

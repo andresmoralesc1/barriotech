@@ -142,7 +142,16 @@ export function VendorDetailClient({ vendorId, vendorSlug }: Props) {
           <VendorContactActions vendor={adaptedVendor} />
         </div>
 
-        <VendorProducts products={products} extraPhotos={productPhotos} onAddToCart={handleAddToCart} />
+        {/* Phase G5: pass vendor identity so the "Reservar" button on
+            service offerings can open WhatsApp directly. The shape
+            is minimal (name + phone) — VendorProducts only needs
+            these to construct the wa.me link + greeting line. */}
+        <VendorProducts
+          products={products}
+          extraPhotos={productPhotos}
+          onAddToCart={handleAddToCart}
+          vendor={{ name: vendor.name, phone: vendor.phone }}
+        />
 
         {/* Review form is for buyers only — sellers can't review their own profile. */}
         {user && user.role === 'buyer' && (
