@@ -76,6 +76,13 @@ export function SiteHeader() {
 
   const navLinks = [
     { href: '/map', label: 'Explorar' },
+    // Phase pivot (2026-08-10): services are no longer on the map.
+    // /servicios is the dedicated discovery surface (city +
+    // category + "a domicilio" filter). Sits next to "Explorar"
+    // because they're complementary: the map shows products
+    // nearby, /servicios shows services the buyer wants to
+    // hire (which often come to them).
+    { href: '/servicios', label: 'Servicios' },
     { href: '/nosotros', label: 'Nosotros' },
     { href: '/contacto', label: 'Contacto' },
   ]
