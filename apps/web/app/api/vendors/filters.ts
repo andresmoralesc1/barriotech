@@ -192,22 +192,25 @@ export function buildVendorWhereClause(filters: VendorFilters, startAt = 1): Whe
   if (filters.q) {
     // Phase D1: free-text search. Matches vendor name + description
     // OR any of the vendor's active products/services. Uses ILIKE
-    // (case-insensitive) on both sides so a buyer typing "Salsa"
-    // finds a vendor named "academia Baquiano" with an offering
-    // called "Clases de salsa". The first OR matches the vendor
-    // itself; the EXISTS subquery matches via products.
+    // + unaccent() on both sides (migration 104 enabled the
+    // extension) so a buyer typing any of {peluqueria, Peluquería,
+    // PELUQUERIA} matches "Peluquería a Domicilio Test". Without
+    // unaccent(), Postgres ILIKE is byte-compare in the default `C`
+    // collation — it would miss the accented forms.
     //
     // Cost: EXISTS is an index hit on `idx_products_vendor_id`
-    // plus a row-level ILIKE per product. Acceptable for the
-    // ≤500-vendor cap. Could later swap to `to_tsquery` + GIN
-    // index when the catalog grows past a few thousand offerings.
+    // plus a row-level ILIKE per product. The unaccent() wrapping
+    // adds a per-row function call (negligible at the map viewport
+    // scale). When the catalog grows past a few thousand
+    // offerings, swap to `to_tsquery` + a GIN index on
+    // `to_tsvector('simple', unaccent(name || ' ' || description))`.
     w.push(`AND (
-      v.name ILIKE $${i} OR v.description ILIKE $${i}
+      unaccent(v.name) ILIKE unaccent($${i}) OR unaccent(v.description) ILIKE unaccent($${i})
       OR EXISTS (
         SELECT 1 FROM products p
         WHERE p.vendor_id = v.id
           AND p.is_active = true
-          AND p.name ILIKE $${i}
+          AND unaccent(p.name) ILIKE unaccent($${i})
       )
     )`)
     a.push(`%${filters.q}%`)

@@ -206,6 +206,20 @@ export function MapView() {
     try { localStorage.setItem('barriotech_guest_banner_dismissed', '1') } catch {}
   }
 
+  // Phase G2: auto-fade the guest banner after 8s. Without this,
+  // an anonymous user lands on /map and the banner sits there
+  // forever (until the user clicks X). For a buyer who's actively
+  // scanning the map, the banner competes with vendor pins.
+  // 8s is enough to register the message and invite a tap, but
+  // short enough that scrolling the map isn't blocked for long.
+  // Only fires when the banner is actually visible — the dep on
+  // `guestBannerDismissed` makes it a no-op after dismissal.
+  useEffect(() => {
+    if (guestBannerDismissed) return
+    const t = window.setTimeout(dismissGuestBanner, 8000)
+    return () => window.clearTimeout(t)
+  }, [guestBannerDismissed])
+
   // Vendors are browsable for guests, but they cannot see details until
   // they sign in. We track this as a single flag derived from auth state.
 
