@@ -11,9 +11,40 @@ import { useEffect } from 'react'
 import type { Vendor } from '@/lib/core/types'
 
 // Dynamic import para evitar SSR con Leaflet
+// Phase H2: the loading state was a plain gray box (the only
+// thing the user saw while MapView's 80+ components + leaflet
+// bundle downloaded). Now it mimics the real map surface:
+// fake map tiles as a grid of light gray cells, three pulse
+// dots for "incoming vendor markers", and a centered
+// "Cargando mapa…" label. When MapView takes over it
+// replaces the skeleton via React's Suspense boundary.
 const MapView = dynamic(
   () => import('@/components/map/MapView').then((m) => m.MapView),
-  { ssr: false, loading: () => <div className="flex-1 bg-gray-200 animate-pulse rounded-xl" /> }
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 bg-stone-100 rounded-xl relative overflow-hidden" role="status" aria-label="Cargando mapa">
+        <div className="absolute inset-0 grid grid-cols-6 grid-rows-4 gap-px">
+          {Array.from({ length: 24 }).map((_, i) => (
+            <div
+              key={i}
+              className="bg-stone-200/60 animate-pulse"
+              style={{ animationDelay: `${(i % 8) * 80}ms` }}
+            />
+          ))}
+        </div>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="bg-white/90 backdrop-blur-sm border border-stone-200 shadow-card rounded-full px-4 py-2 flex items-center gap-2 text-sm text-stone-700">
+            <span
+              className="inline-block w-3.5 h-3.5 border-2 border-primary-700 border-t-transparent rounded-full animate-spin"
+              aria-hidden="true"
+            />
+            <span>Cargando mapa…</span>
+          </div>
+        </div>
+      </div>
+    ),
+  }
 )
 
 // Transform API vendor to match Vendor type. Must keep `phone` so the

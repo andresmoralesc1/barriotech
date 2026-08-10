@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, Marker, Popup, CircleMarker, useMap, useMapEve
 import { PullToRefresh } from '@/components/ui/PullToRefresh'
 import 'leaflet/dist/leaflet.css'
 import { Frown, LogIn, X } from 'lucide-react'
+import { toast } from '@/components/ui/Toast'
 
 // Leaflet touch-target override is injected from the MapContainer via a
 // runtime <style> tag (see LeafletTouchTargetOverride component below).
@@ -158,11 +159,24 @@ export function MapView() {
   // The hooks below are grouped together to keep the data-flow of the page
   // legible at a glance.
   const [activeVendors, setActiveVendors] = useState<Vendor[]>([])
+  // Phase H2: distinguish "loading" from "empty" so the map can show
+  // a skeleton during the first fetch (vs the Frown empty state when
+  // the request succeeded but returned 0 vendors). Without this flag,
+  // a 50ms API that returns [] looks identical to a 5s API that's
+  // still in flight, so the user sees a flash of "no hay vendedores"
+  // before the data loads. Default false; flips to true after the
+  // first fetch settles (success OR error — a resolved promise
+  // counts as "loaded" regardless of the result).
+  const [vendorsLoaded, setVendorsLoaded] = useState(false)
   // MAP-001: cache of `L.DivIcon` instances keyed by visual props. Persists
   // across re-renders so the same `<Marker>` keeps receiving the same icon
   // reference and react-leaflet skips `setIcon()` (which was destroying the
   // marker DOM every 30s poll and causing the visible flicker).
   const iconCacheRef = useRef<Map<string, L.DivIcon>>(new Map())
+  // Phase H2: throttle for the vendor-fetch error toast so a sustained
+  // outage doesn't stack 30 toasts/minute. 30s window matches the
+  // polling cadence — at most one toast per failed poll.
+  const lastVendorErrorToastRef = useRef<number>(0)
   const [cardHeightPx, setCardHeightPx] = useState(0)
   const cardRef = useRef<HTMLDivElement | null>(null)
   const filters = useStore((s) => s.filters)
@@ -289,7 +303,24 @@ export function MapView() {
         })
       }
     } catch (err) {
+      // Phase H2: surface the failure. A silent setActiveVendors([])
+      // would let the user stare at an empty map with no explanation.
+      // The toast is non-blocking and deduped (one per session for
+      // the first failure, then quiet for 30s — the polling cadence
+      // is short and we don't want a stack of toasts).
       console.error('Failed to fetch vendors:', err)
+      const now = Date.now()
+      if (now - lastVendorErrorToastRef.current > 30_000) {
+        lastVendorErrorToastRef.current = now
+        toast({
+          kind: 'error',
+          title: 'No pudimos cargar los vendedores',
+          description: 'Comprueba tu conexión e intenta de nuevo.',
+          duration: 4500,
+        })
+      }
+    } finally {
+      setVendorsLoaded(true)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCity.id, hasRealGeolocation, filters.modality, filters.categoryOr])
@@ -560,31 +591,33 @@ export function MapView() {
         <MapPanToVendor vendor={selectedVendor} bottomOffsetPx={cardHeightPx + 16} />
 
         {filteredVendors.length === 0 ? (
-          <Marker position={center}>
-            <Popup>
-              <div className="text-center p-3 min-w-[200px]">
-                <Frown size={36} className="mx-auto text-gray-400 mb-3" />
-                <p className="font-semibold text-gray-800">No hay vendedores</p>
-                {filters.searchQuery ? (
-                  <p className="text-sm text-gray-500 mt-1">
-                    No encontramos &quot;{filters.searchQuery}&quot;
-                  </p>
-                ) : filters.category ? (
-                  <p className="text-sm text-gray-500 mt-1">
-                    No hay vendedores de esta categoría
-                  </p>
-                ) : filters.maxDistanceMeters !== null ? (
-                  <p className="text-sm text-gray-500 mt-1">
-                    No hay vendedores en este radio
-                  </p>
-                ) : (
-                  <p className="text-sm text-gray-500 mt-1">
-                    Intenta con otro filtro o cambia de zona
-                  </p>
-                )}
-              </div>
-            </Popup>
-          </Marker>
+          vendorsLoaded ? (
+            <Marker position={center}>
+              <Popup>
+                <div className="text-center p-3 min-w-[200px]">
+                  <Frown size={36} className="mx-auto text-gray-400 mb-3" />
+                  <p className="font-semibold text-gray-800">No hay vendedores</p>
+                  {filters.searchQuery ? (
+                    <p className="text-sm text-gray-500 mt-1">
+                      No encontramos &quot;{filters.searchQuery}&quot;
+                    </p>
+                  ) : filters.category ? (
+                    <p className="text-sm text-gray-500 mt-1">
+                      No hay vendedores de esta categoría
+                    </p>
+                  ) : filters.maxDistanceMeters !== null ? (
+                    <p className="text-sm text-gray-500 mt-1">
+                      No hay vendedores en este radio
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500 mt-1">
+                      Intenta con otro filtro o cambia de zona
+                    </p>
+                  )}
+                </div>
+              </Popup>
+            </Marker>
+          ) : null
         ) : (
           filteredVendors.map((vendor) => {
             // Phase E2: service vendors without a fixed location (mobile
@@ -820,6 +853,30 @@ export function MapView() {
           selectedVendor={!!selectedVendor}
           cardHeightPx={cardHeightPx}
         />
+      )}
+
+      {/* Phase H2: top-center loading pill. Visible only while the
+          first vendor fetch is in flight. Renders a small spinner +
+          "Buscando vendedores…" label so the buyer doesn't see a
+          blank map (or, worse, the Frown empty marker that means
+          "0 vendors" which the user might misread as a search
+          miss). z-[1100] sits above the guest banner (z-1000) so
+          the loading state is always visible during initial load
+          even when both render together. */}
+      {!vendorsLoaded && (
+        <div
+          className="absolute top-4 left-1/2 -translate-x-1/2 z-[1100] pointer-events-none"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="bg-white/90 backdrop-blur-sm border border-stone-200 shadow-card rounded-full px-4 py-2 flex items-center gap-2 text-sm text-stone-700">
+            <span
+              className="inline-block w-3.5 h-3.5 border-2 border-primary-700 border-t-transparent rounded-full animate-spin"
+              aria-hidden="true"
+            />
+            <span>Buscando vendedores…</span>
+          </div>
+        </div>
       )}
 
       {/* Guest banner — only visible to non-logged-in users */}
