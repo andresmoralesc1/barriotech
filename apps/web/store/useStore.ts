@@ -311,7 +311,16 @@ export const useStore = create<AppState>()(
         state.setHasHydrated(false)
 
         // After rehydrating from localStorage, check if user is logged in via cookie
-        // This handles page refreshes and direct navigation after login
+        // This handles page refreshes and direct navigation after login.
+        // Optimization: short-circuit if there is no auth cookie. Without
+        // this, every anonymous session fires a 401 against /api/auth/me
+        // on every page load — noisy console + wasted round-trip. We check
+        // for the cookie first; if absent, the user is definitely
+        // logged out and the API call is guaranteed to 401.
+        if (typeof document === 'undefined' || !document.cookie.includes('gps_session')) {
+          state.setHasHydrated(true)
+          return
+        }
         fetch('/api/auth/me', { credentials: 'include' })
           .then((res) => {
             if (res.ok) return res.json()

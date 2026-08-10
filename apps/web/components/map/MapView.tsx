@@ -644,10 +644,27 @@ export function MapView() {
                 // distinct visual treatment (round + dashed border +
                 // subtitle) is honest about the "I serve all of <city>"
                 // affordance.
+                // Phase F1: when multiple citywide pins would overlap
+                // (e.g. 3 remote tutors in the same city), deterministic
+                // jitter from a string hash of the vendor.id keeps
+                // them visually separated without random placement
+                // (which would cause markers to jump on every poll).
+                // Magnitude ~0.0002° ≈ 22 m, fine at city zoom.
                 position={
                   hasLocation
                     ? [vendor.latitude!, vendor.longitude!]
-                    : [selectedCity.center[0], selectedCity.center[1]]
+                    : (() => {
+                        const hash = [...vendor.id].reduce(
+                          (acc, ch) => ((acc << 5) - acc + ch.charCodeAt(0)) | 0,
+                          0,
+                        )
+                        const dx = ((hash & 0xff) - 128) / 128 * 0.0002
+                        const dy = (((hash >> 8) & 0xff) - 128) / 128 * 0.0002
+                        return [
+                          selectedCity.center[0] + dy,
+                          selectedCity.center[1] + dx,
+                        ]
+                      })()
                 }
                 icon={markerIcon}
                 eventHandlers={{
