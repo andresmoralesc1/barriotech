@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { X, MapPin, Heart, Bell, ArrowRight } from 'lucide-react'
 
@@ -35,12 +35,32 @@ const STEPS = [
  * 3-step onboarding tour for new buyers.
  * Shown once on first visit to a buyer page. Dismissed permanently after
  * the user completes all steps or hits Skip.
+ *
+ * Phase G6 a11y: WCAG 2.1 modal dialog pattern.
+ *   - role="dialog" + aria-modal + labelledby + describedby (already
+ *     present from the original implementation).
+ *   - ESC closes (added in this commit).
+ *   - Backdrop click closes (the user can now dismiss without finding
+ *     the X button).
+ *   - Focus trap: Tab and Shift+Tab cycle within the dialog instead
+ *     of escaping to the underlying app. Critical: without this, a
+ *     screen reader user tabbing through the tour would land on
+ *     invisible map markers / vendor pins behind the dialog.
+ *   - Initial focus moves to the close button (top-right X) so the
+ *     user has a safe "out". On close, focus returns to the element
+ *     that triggered the tour (or document.body if unknown).
+ *
+ * The focusable-element search runs on every Tab keystroke — fine
+ * for a dialog with 4-5 focusable elements (X, 2 CTA buttons, skip).
  */
 export function OnboardingTour() {
   const router = useRouter()
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState(0)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const triggerRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     // Only show on buyer pages (map, favorites, settings) and only once.
@@ -62,20 +82,68 @@ export function OnboardingTour() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Close on Escape (WCAG 2.1.1 — keyboard access)
+  // Close on Escape + focus trap (WCAG 2.1 — keyboard + non-escape focus).
   useEffect(() => {
     if (!open) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') skip()
+
+    // Capture the element that had focus before the dialog opened so we
+    // can restore it on close. Without restoration, screen readers and
+    // keyboard users are stranded at <body> after dismissing the tour.
+    triggerRef.current = (document.activeElement as HTMLElement | null) ?? null
+
+    // Initial focus: first focusable element inside the dialog. We pick
+    // the close (X) button as a safe "out" — Esc / Enter / Tab all
+    // get the user out from there.
+    requestAnimationFrame(() => {
+      closeButtonRef.current?.focus()
+    })
+
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        skip()
+        return
+      }
+      // Tab / Shift+Tab focus trap
+      if (e.key === 'Tab') {
+        const dialog = dialogRef.current
+        if (!dialog) return
+        const focusable = dialog.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        )
+        if (focusable.length === 0) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        const active = document.activeElement as HTMLElement | null
+        if (e.shiftKey && active === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
     }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    document.addEventListener('keydown', keyHandler)
+    return () => document.removeEventListener('keydown', keyHandler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const finish = () => {
     localStorage.setItem(STORAGE_KEY, '1')
     setOpen(false)
+    // Restore focus to the trigger element so keyboard / screen-reader
+    // users land back where they were. Fall back to <body> if the
+    // trigger is gone (e.g. after a route change).
+    requestAnimationFrame(() => {
+      const el = triggerRef.current
+      if (el && document.contains(el)) {
+        el.focus()
+      } else {
+        document.body.focus()
+      }
+      triggerRef.current = null
+    })
   }
 
   const next = () => {
@@ -106,10 +174,21 @@ export function OnboardingTour() {
       aria-modal="true"
       aria-labelledby="onboarding-tour-title"
       aria-describedby="onboarding-tour-body"
+      // G6 backdrop click closes the tour. Inner clicks (which carry
+      // the dialog itself) stop propagation so the backdrop handler
+      // doesn't fire from inside the dialog.
+      onClick={(e) => {
+        if (e.target === e.currentTarget) finish()
+      }}
       className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm"
     >
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl max-w-md w-full p-6 relative">
+      <div
+        ref={dialogRef}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl max-w-md w-full p-6 relative"
+      >
         <button
+          ref={closeButtonRef}
           onClick={skip}
           aria-label="Cerrar tour"
           className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 p-1 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg"
