@@ -134,22 +134,23 @@ export function buildVendorWhereClause(filters: VendorFilters, startAt = 1): Whe
     w.push(`AND v.is_active = true`)
   }
   if (filters.withLocation) {
-    // Phase E1: vendors without a fixed location can still appear on
-    // the map if they're a service vendor with modality=travels or
-    // modality=remote. A mobile hairdresser who travels to the client
-    // doesn't need to publish their home address to be discoverable,
-    // and a remote tutor doesn't have a "location" at all. Both
-    // get rendered at the city center on the map (see MapView
-    // city-wide pin handling).
+    // Phase pivot (2026-08-10): services (clases/bienestar/belleza/
+    // hogar/eventos) are NOT shown on the map anymore. They have
+    // their own browse page at /servicios. The map is now strictly
+    // for vendors with a fixed physical location — product vendors
+    // (frutas/comida/bebidas/artesanias/ropa/otros) the buyer can
+    // walk to. A mobile hairdresser (modality=travels) doesn't
+    // need a map pin — they're discovered via the services index
+    // and contacted via WhatsApp.
     //
-    // Product vendors (frutas/comida/etc) still REQUIRE a fixed
-    // location — a fruit cart without a GPS ping has no map
-    // presence, which is the right UX (the buyer can't walk to a
-    // pin that's not on the map).
-    w.push(`AND (
-      (v.latitude IS NOT NULL AND v.longitude IS NOT NULL)
-      OR v.category IN ('clases','bienestar','belleza','hogar','eventos')
-    )`)
+    // A service vendor with modality=on_site (e.g. "Estudio de
+    // tatuajes en mi local") is the edge case: they have a fixed
+    // location AND are a service. We exclude them from the map
+    // by category for now — the simpler rule is "map = products
+    // only, services = /servicios only" — and document the
+    // on_site-with-location overlap as a follow-up.
+    w.push(`AND v.latitude IS NOT NULL AND v.longitude IS NOT NULL`)
+    w.push(`AND v.category NOT IN ('clases','bienestar','belleza','hogar','eventos')`)
   }
   if (filters.cityId) {
     w.push(`AND v.city_id = $${i}`)

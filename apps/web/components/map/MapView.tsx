@@ -98,14 +98,15 @@ function buildVendorMarkerIcon(props: MarkerIconProps): L.DivIcon {
     ? `<div style="position:absolute;top:46px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,0.95);backdrop-filter:blur(4px);color:#1f2937;font-size:10px;font-weight:600;line-height:1;padding:2px 6px;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,0.25);white-space:nowrap;max-width:96px;overflow:hidden;text-overflow:ellipsis;pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">${labelText}</div>`
     : ''
 
-  // City-wide subtitle: tells the buyer this vendor doesn't have a
-  // fixed pin location. "A domicilio" if the vendor travels, else
-  // "En toda la ciudad" (covers remote / on_site-without-GPS).
+  // City-wide subtitle: the vendor has no fixed pin location. With
+  // services moved off the map (Phase pivot 2026-08-10) this only
+  // fires for product vendors whose GPS hasn't pinged — a rare
+  // state, so the subtitle is neutral ("Sin ubicación") rather
+  // than service-flavored. The dashed-border + circle shape
+  // already differentiates the pin from a regular teardrop.
   const cityWideBadge = hasLocation
     ? ''
-    : `<div style="position:absolute;bottom:-22px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,0.95);backdrop-filter:blur(4px);color:#0f766e;font-size:9px;font-weight:700;line-height:1;padding:2px 6px;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,0.25);white-space:nowrap;pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;text-transform:uppercase;letter-spacing:0.3px;">${
-        hasTravels ? 'A domicilio' : 'En toda la ciudad'
-      }</div>`
+    : `<div style="position:absolute;bottom:-22px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,0.95);backdrop-filter:blur(4px);color:#78716c;font-size:9px;font-weight:700;line-height:1;padding:2px 6px;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,0.25);white-space:nowrap;pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;text-transform:uppercase;letter-spacing:0.3px;">Sin ubicación</div>`
 
   // Sponsored star badge: top-right of the pin.
   const starBadge = sponsored
@@ -693,34 +694,18 @@ export function MapView() {
             return (
               <Marker
                 key={vendor.id}
-                // Phase E2: city-wide pins position at the city center
-                // (no GPS pings). We don't spread the pins across a grid
-                // because that would mislead the buyer about the
-                // vendor's true location; stacking at the center with
-                // distinct visual treatment (round + dashed border +
-                // subtitle) is honest about the "I serve all of <city>"
-                // affordance.
-                // Phase F1: when multiple citywide pins would overlap
-                // (e.g. 3 remote tutors in the same city), deterministic
-                // jitter from a string hash of the vendor.id keeps
-                // them visually separated without random placement
-                // (which would cause markers to jump on every poll).
-                // Magnitude ~0.0002° ≈ 22 m, fine at city zoom.
+                // Phase pivot (2026-08-10): services are no longer
+                // shown on the map. The API filter (filters.ts)
+                // excludes service categories, so `hasLocation` is
+                // always true for vendors that reach this branch.
+                // We keep the city-center fallback defensively so
+                // a stale activeVendors in zustand state doesn't
+                // crash the render — but in practice the marker
+                // always sits at its real lat/lng.
                 position={
                   hasLocation
                     ? [vendor.latitude!, vendor.longitude!]
-                    : (() => {
-                        const hash = [...vendor.id].reduce(
-                          (acc, ch) => ((acc << 5) - acc + ch.charCodeAt(0)) | 0,
-                          0,
-                        )
-                        const dx = ((hash & 0xff) - 128) / 128 * 0.0002
-                        const dy = (((hash >> 8) & 0xff) - 128) / 128 * 0.0002
-                        return [
-                          selectedCity.center[0] + dy,
-                          selectedCity.center[1] + dx,
-                        ]
-                      })()
+                    : [selectedCity.center[0], selectedCity.center[1]]
                 }
                 icon={markerIcon}
                 eventHandlers={{
