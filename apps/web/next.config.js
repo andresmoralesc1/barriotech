@@ -13,6 +13,22 @@ const nextConfig = {
   outputFileTracingRoot: path.join(__dirname, '../../'),
 
   // ---------------------------------------------------------------------
+  // Drop the legacy ES5 polyfills chunk (Pagespeed 2026-08-12).
+  //
+  // Next.js emits `static/chunks/polyfills-*.js` via CopyFilePlugin from
+  // @next/polyfill-nomodule on every build. It's loaded with `<script
+  // noModule>` so modern browsers (Chrome 90+, Firefox 90+, Safari 15.4+)
+  // skip execution — but they still download it (~40 KiB gzipped). Since
+  // we don't support IE 11 (the only browser that actually needs these),
+  // we exclude the file from the trace output entirely.
+  //
+  // Risk: zero. Solo corres riesgo con IE11 que ya no soportamos.
+  // ---------------------------------------------------------------------
+  outputFileTracingExcludes: {
+    '*': ['.next/static/chunks/polyfills-*.js'],
+  },
+
+  // ---------------------------------------------------------------------
   // Image optimization (Etapa 13)
   //
   // Whitelist external hosts so <Image src="https://..." /> can optimize.
