@@ -959,3 +959,31 @@ test('register: rejects unknown role values (admin still gated at API layer)', a
   assert.equal(res.status, 400)
   assert.match(res.body.error, /vendedor|comprador|servicio|tipo de cuenta/i)
 })
+
+// --- Task 5 (2026-08-12): service+wantsMap=true → client routes to /onboarding
+//
+// /onboarding is rendered client-side after register; the server-side signal
+// is just `body.user.wantsMap === true` (RegisterForm reads it and pushes
+// to /onboarding when role='service' && wantsMap). The seller branch is
+// already covered by the test above (line 868), so this is the explicit
+// onboarding-routing contract for the new service path.
+
+test('onboarding: service+wantsMap=true echoes wantsMap in user response (client routes to /onboarding)', async () => {
+  await resetRateLimit()
+  const ts = Date.now()
+  const email = `svc-onb-${ts}@barriotech-test.com`
+  const phone = ('3' + String(ts + 4).slice(-9)).slice(-10) // ts+4 keeps it unique vs prior tests
+  const res = await fetchJSON('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email, password: 'SvcOnb123!', name: 'Servicio Onb',
+      phone, cityId: 'bogota',
+      role: 'service', wantsMap: true,
+      acceptedTerms: true, acceptedPrivacy: true,
+    }),
+  })
+  assert.equal(res.status, 200)
+  assert.equal(res.body.user.role, 'service')
+  assert.equal(res.body.user.wantsMap, true)
+})

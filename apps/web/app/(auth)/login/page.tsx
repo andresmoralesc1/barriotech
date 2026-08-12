@@ -53,7 +53,7 @@ function AuthPageContent() {
             error={error}
             setError={setError}
             setIsLoading={setIsLoading}
-            initialRole={searchParams.get('role') === 'seller' ? 'seller' : 'buyer'}
+            initialRole={(searchParams.get('role') as 'seller' | 'service' | null) ?? 'buyer'}
             redirectTo="map"
           />
         )}

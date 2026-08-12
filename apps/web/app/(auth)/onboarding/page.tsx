@@ -31,6 +31,13 @@ export default function OnboardingPage() {
   const user = useStore((s) => s.user)
   const [mounted, setMounted] = useState(false)
 
+  // Task 5 (2026-08-12): service users with wantsMap=true need the same
+  // seller onboarding flow as role='seller'. The 'wantsMap === true'
+  // (strict) means a service user who didn't opt into map visibility
+  // skips the slider — they go straight to /map like a buyer.
+  const isOnboardingUser =
+    user?.role === 'seller' || (user?.role === 'service' && user.wantsMap === true)
+
   useEffect(() => {
     setMounted(true)
   }, [])
@@ -54,7 +61,7 @@ export default function OnboardingPage() {
     const safe = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')
       ? redirectTo
       : '/dashboard'
-    if (user?.role === 'seller') {
+    if (isOnboardingUser) {
       router.push(safe)
     } else {
       router.push('/login')
@@ -117,8 +124,8 @@ export default function OnboardingPage() {
     }
   }
 
-  // Show seller onboarding if user is a seller
-  if (mounted && user?.role === 'seller') {
+  // Show seller onboarding if user is a seller (or service+wantsMap)
+  if (mounted && isOnboardingUser) {
     return (
       <SellerOnboardingSlider
         onComplete={handleSellerComplete}

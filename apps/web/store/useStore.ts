@@ -13,6 +13,11 @@ export interface User {
   phone?: string
   cityId?: string
   emailVerified?: boolean
+  // Task 5 (2026-08-12): service-role signup decision. true = user opted
+  // into map visibility at signup, so /onboarding should trigger the
+  // seller-style slider. Persisted on profiles.wants_map; echoed in
+  // /api/auth/register and /api/auth/me responses.
+  wantsMap?: boolean
 }
 
 interface Filters {
