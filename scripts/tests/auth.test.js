@@ -809,3 +809,153 @@ test('Sprint 11 B-AUTH-4: /api/auth/refresh after logout returns 401', async () 
   assert.equal(refresh2.status, 401,
     `after logout /api/auth/refresh should be 401, got ${refresh2.status}`)
 })
+
+// --- Task 3 (2026-08-12): service-account signup with wantsMap -----------
+//
+// The brief's `describe` blocks were adapted to `test()` (node:test runner
+// pattern, matches the rest of this file). The vendor-row check is a direct
+// DB query — /api/vendors/me is gated to role='seller' so the service-role
+// assertion is verified by joining profiles + vendors via pg (the same
+// pattern the resetRateLimit test uses above).
+
+test('service signup: registers without map visibility (no vendor row)', async () => {
+  await resetRateLimit()
+  const ts = Date.now()
+  const email = `svc-${ts}@barriotech-test.com`
+  // 10-digit Colombian mobile (matches the existing test pattern; the
+  // validator only accepts 10 digits or 12 with country code 57).
+  const phone = ('3' + String(ts).slice(-9)).slice(-10)
+  const password = 'SvcTest123!'
+
+  const res = await fetchJSON('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email, password, name: 'Servicio Test',
+      phone, cityId: 'bogota',
+      role: 'service', wantsMap: false,
+      acceptedTerms: true, acceptedPrivacy: true,
+    }),
+  })
+  assert.equal(res.status, 200)
+  assert.equal(res.body.user.role, 'service')
+  assert.equal(res.body.user.wantsMap, false)
+
+  // Verify NO vendor row was created for this user.
+  const { Client } = require('pg')
+  const c = new Client({
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    database: process.env.DB_NAME || 'gps_street_sellers',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || 'postgres',
+  })
+  await c.connect()
+  try {
+    const r = await c.query(
+      `SELECT v.id FROM vendors v
+       JOIN profiles p ON p.id = v.profile_id
+       WHERE p.user_id = (SELECT id FROM users WHERE email = $1)`,
+      [email]
+    )
+    assert.equal(r.rows.length, 0,
+      'service signup with wantsMap=false must NOT create a vendor row')
+  } finally {
+    await c.end()
+  }
+})
+
+test('service signup: with wantsMap=true creates a studio vendor row', async () => {
+  await resetRateLimit()
+  const ts = Date.now()
+  const email = `svc2-${ts}@barriotech-test.com`
+  const phone = ('3' + String(ts + 1).slice(-9)).slice(-10) // ts+1 keeps it unique vs prior test
+  const password = 'SvcTest123!'
+
+  const res = await fetchJSON('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email, password, name: 'Servicio Con Local',
+      phone, cityId: 'bogota',
+      role: 'service', wantsMap: true,
+      acceptedTerms: true, acceptedPrivacy: true,
+    }),
+  })
+  assert.equal(res.status, 200)
+  assert.equal(res.body.user.role, 'service')
+  assert.equal(res.body.user.wantsMap, true)
+
+  // Verify the vendor row exists with station_type='studio' and is_active=true.
+  const { Client } = require('pg')
+  const c = new Client({
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    database: process.env.DB_NAME || 'gps_street_sellers',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || 'postgres',
+  })
+  await c.connect()
+  try {
+    const r = await c.query(
+      `SELECT v.station_type, v.is_active, v.latitude, v.longitude
+       FROM vendors v
+       JOIN profiles p ON p.id = v.profile_id
+       WHERE p.user_id = (SELECT id FROM users WHERE email = $1)`,
+      [email]
+    )
+    assert.equal(r.rows.length, 1, 'exactly one vendor row expected')
+    assert.equal(r.rows[0].station_type, 'studio',
+      'service-with-map vendor must have station_type=studio')
+    assert.equal(r.rows[0].is_active, true,
+      'service-with-map vendor must auto-activate (is_active=true)')
+    // City center for bogota should seed a non-null lat/lng.
+    assert.equal(typeof r.rows[0].latitude, 'number',
+      'service-with-map vendor must be seeded with city-center lat')
+    assert.equal(typeof r.rows[0].longitude, 'number',
+      'service-with-map vendor must be seeded with city-center lng')
+  } finally {
+    await c.end()
+  }
+})
+
+test('service signup: rejects wantsMap=true without a cityId', async () => {
+  await resetRateLimit()
+  const ts = Date.now()
+  const phone = ('3' + String(ts + 2).slice(-9)).slice(-10)
+  const res = await fetchJSON('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: `svc-no-city-${ts}@barriotech-test.com`,
+      password: 'SvcTest123!',
+      name: 'Sin Ciudad',
+      phone,
+      role: 'service', wantsMap: true,
+      acceptedTerms: true, acceptedPrivacy: true,
+    }),
+  })
+  assert.equal(res.status, 400)
+  assert.match(res.body.error, /ciudad|local|estudio/i)
+})
+
+test('register: rejects unknown role values (admin still gated at API layer)', async () => {
+  await resetRateLimit()
+  const ts = Date.now()
+  const phone = ('3' + String(ts + 3).slice(-9)).slice(-10)
+  const res = await fetchJSON('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: `bad-${ts}@barriotech-test.com`,
+      password: 'SvcTest123!',
+      name: 'Bad Role',
+      phone,
+      role: 'admin',
+      acceptedTerms: true, acceptedPrivacy: true,
+    }),
+  })
+  // admin still rejected at the API layer (per migration 027 comment).
+  assert.equal(res.status, 400)
+  assert.match(res.body.error, /vendedor|comprador|servicio|tipo de cuenta/i)
+})

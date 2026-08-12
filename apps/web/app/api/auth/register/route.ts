@@ -33,12 +33,13 @@ export async function POST(req: NextRequest) {
     const parsed = await parseJsonBody<{
       email?: unknown; password?: unknown; name?: unknown;
       phone?: unknown; cityId?: unknown; role?: unknown;
+      wantsMap?: unknown;
       acceptedTerms?: unknown; acceptedPrivacy?: unknown;
     }>(req)
     if (!parsed.ok) {
       return NextResponse.json({ error: parsed.error }, { status: 400 })
     }
-    const { email, password, name, phone, cityId, role, acceptedTerms, acceptedPrivacy } = parsed.body
+    const { email, password, name, phone, cityId, role, wantsMap, acceptedTerms, acceptedPrivacy } = parsed.body
     if (typeof password !== 'string') {
       return NextResponse.json({ error: 'La contraseña es requerida' }, { status: 400 })
     }
@@ -68,12 +69,18 @@ export async function POST(req: NextRequest) {
     // DB CHECK now allows it (migration 027), but self-registration must
     // never produce an admin. Promotions go through
     // scripts/dev/create-admin.js.
-    if (role !== 'buyer' && role !== 'seller') {
+    // Task 3 (2026-08-12): 'service' added — a service provider may opt
+    // into map visibility via wantsMap=true, which auto-bootstraps a
+    // 'studio'-type vendor row at the chosen city center.
+    if (role !== 'buyer' && role !== 'seller' && role !== 'service') {
       return NextResponse.json(
-        { error: 'Selecciona un tipo de cuenta: vendedor o comprador' },
+        { error: 'Selecciona un tipo de cuenta: vendedor, comprador o servicio' },
         { status: 400 }
       )
     }
+    // Service role + wantsMap=true is the only path that creates a vendor
+    // row. For buyer/seller, wantsMap is ignored and persisted as false.
+    const wantsMapEnabled = role === 'service' ? Boolean(wantsMap) : false
 
     // ── Password strength: minimum 8 chars, no top-50 common passwords.
     // Bcrypt cost 13 (raised from 12 in 2026-07-27 audit) — ~500ms on
@@ -180,6 +187,14 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
+    // Task 3 (2026-08-12): service with wantsMap=true also needs a city
+    // to seed the studio vendor's lat/lng at the city center.
+    if (roleValue === 'service' && wantsMapEnabled && !cityId) {
+      return NextResponse.json(
+        { error: 'Selecciona una ciudad para tu local/estudio' },
+        { status: 400 }
+      )
+    }
 
     // Wrap users + profiles insert in a transaction so a profile failure
     // rolls back the user row.
@@ -255,7 +270,15 @@ export async function POST(req: NextRequest) {
       // appears at a sensible position immediately; the seller can
       // drag the pin to their actual spot via /dashboard or via the
       // onboarding GPS step (apps/web/app/(auth)/onboarding).
-      if (roleValue === 'seller') {
+      //
+      // Task 3 (2026-08-12): also bootstrap a vendor for service-role
+      // users that opted into map visibility (wantsMapEnabled). The
+      // station_type is 'studio' for services vs 'mobile' for sellers.
+      // is_active differs by branch on purpose — service+wantsMap
+      // auto-activates the pin (visible immediately on the map at the
+      // city center); sellers stay inactive (is_active=false) so the
+      // owner explicitly flips them on after finishing onboarding.
+      if (roleValue === 'seller' || (roleValue === 'service' && wantsMapEnabled)) {
         const firstName = trimmedName.split(' ')[0] || trimmedName || 'vendedor'
         const placeholderName = `Mi negocio de ${firstName}`
         const slug = await generateUniqueSlug(client, placeholderName, (typeof cityId === 'string' ? cityId : null))
@@ -264,17 +287,27 @@ export async function POST(req: NextRequest) {
           : undefined
         const seedLat = cityCenter ? cityCenter[0] : null
         const seedLng = cityCenter ? cityCenter[1] : null
+        const stationType = roleValue === 'service' ? 'studio' : 'mobile'
+        const isActive = roleValue === 'service' && wantsMapEnabled
         await client.query(
           `INSERT INTO vendors (
             profile_id, name, slug, category, description,
             city_id, latitude, longitude, station_type,
             phone, is_active, is_verified, created_at
           )
-          VALUES ($1, $2, $3, 'comida', '', $4, $5, $6, 'mobile', $7, false, false, NOW())
+          VALUES ($1, $2, $3, 'comida', '', $4, $5, $6, $7, $8, $9, false, NOW())
           ON CONFLICT DO NOTHING`,
-          [profileId, placeholderName, slug, cityId || null, seedLat, seedLng, cleanPhone || null]
+          [profileId, placeholderName, slug, cityId || null, seedLat, seedLng, stationType, cleanPhone || null, isActive]
         )
       }
+
+      // Task 3 (2026-08-12): persist the service-wants-map flag on the
+      // profile so the dashboard / onboarding can read it without an extra
+      // round-trip. For non-service roles, wants_map stays false.
+      await client.query(
+        'UPDATE profiles SET wants_map = $1 WHERE user_id = $2',
+        [wantsMapEnabled, user.id]
+      )
 
       // ── Ley 1581/2012 — record the consent inside the same tx
       const policyVersion = process.env.POLICY_VERSION || 'v1.0'
@@ -336,6 +369,7 @@ export async function POST(req: NextRequest) {
         role: user.role,
         avatarUrl: '',
         emailVerified: false,
+        wantsMap: wantsMapEnabled,
       },
     }, {
       // Auth responses must not be cached by browsers, CDNs, or proxies —
