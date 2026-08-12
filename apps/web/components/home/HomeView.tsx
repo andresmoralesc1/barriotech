@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 
 // Photos from Pexels (Colombian street food / market scenes)
 const HERO_PHOTO = '/hero.jpg'
+const HERO_PHOTO_WEBP = '/hero.webp'
 const STEPS_PHOTOS = [
   'https://images.pexels.com/photos/8824105/pexels-photo-8824105.jpeg?auto=compress&w=600', // encuentra: persona con mapa
   'https://images.pexels.com/photos/37348090/pexels-photo-37348090.jpeg?auto=compress&w=600', // ordena: vendedor ambulante con piñas
@@ -95,7 +96,10 @@ export function HomeView() {
       {/* Hero */}
       <section className="relative min-h-[580px] flex items-center overflow-hidden">
         <div className="absolute inset-0">
-          <img src={HERO_PHOTO} alt="Vendedores locales en Colombia" className="w-full h-full object-cover object-[right_center] md:object-[center_30%]" />
+          <picture>
+            <source srcSet={HERO_PHOTO_WEBP} type="image/webp" />
+            <img src={HERO_PHOTO} alt="Vendedores locales en Colombia" className="w-full h-full object-cover object-[right_center] md:object-[center_30%]" width="1920" height="700" />
+          </picture>
           <div className="absolute inset-0 bg-gradient-to-r from-gray-900/90 via-gray-900/75 to-gray-900/30" />
         </div>
         <div className="relative max-w-6xl mx-auto px-4 py-20 w-full">

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Bricolage_Grotesque } from 'next/font/google'
 import { Providers } from './providers'
 import { SiteHeader } from '@/components/SiteHeader'
 import { SiteFooter } from '@/components/SiteFooter'
@@ -7,6 +8,17 @@ import { ToastContainer } from '@/components/ui/Toast'
 import { UmamiAnalytics } from '@/components/UmamiAnalytics'
 import { SellerOnboardingBanner } from '@/components/SellerOnboardingBanner'
 import './globals.css'
+
+// Self-host Bricolage Grotesque to remove the render-blocking Google Fonts
+// @import. Pagespeed flagged it as 750ms cross-origin + 1.2 KiB CSS. Next.js
+// downloads the font files at build time and serves them from /static, with
+// the correct font-display: swap hint pre-applied.
+const bricolage = Bricolage_Grotesque({
+  subsets: ['latin'],
+  display: 'swap',
+  weight: ['200', '400', '600', '800'],
+  variable: '--font-bricolage',
+})
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://barriotech.com.co'),
@@ -115,7 +127,7 @@ export default function RootLayout({
   }
 
   return (
-    <html lang="es-CO">
+    <html lang="es-CO" className={bricolage.variable}>
       <head>
         <script
           type="application/ld+json"
@@ -126,7 +138,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
         />
       </head>
-      <body className="bg-background-cream min-h-screen flex flex-col">
+      <body className={`bg-background-cream min-h-screen flex flex-col ${bricolage.className}`}>
         <Providers>
           <SiteHeader />
           <SellerOnboardingBanner />
