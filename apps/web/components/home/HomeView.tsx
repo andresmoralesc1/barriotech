@@ -98,7 +98,7 @@ export function HomeView() {
         <div className="absolute inset-0">
           <picture>
             <source srcSet={HERO_PHOTO_WEBP} type="image/webp" />
-            <img src={HERO_PHOTO} alt="Vendedores locales en Colombia" className="w-full h-full object-cover object-[right_center] md:object-[center_30%]" width="1920" height="700" />
+            <img src={HERO_PHOTO} alt="Vendedores locales en Colombia" className="w-full h-full object-cover object-[right_center] md:object-[center_30%]" width="1280" height="467" />
           </picture>
           <div className="absolute inset-0 bg-gradient-to-r from-gray-900/90 via-gray-900/75 to-gray-900/30" />
         </div>
@@ -172,7 +172,7 @@ export function HomeView() {
             ].map((item) => (
               <div key={item.step} className="bg-white rounded-2xl overflow-hidden shadow-card hover:shadow-card-hover transition-shadow">
                 <div className="h-40 relative">
-                  <img src={item.photo} alt={item.title} className="w-full h-full object-cover" />
+                  <Image src={item.photo} alt={item.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />
                   <div className="absolute top-3 left-3 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm">{item.step}</div>
                 </div>
                 <div className="p-5">

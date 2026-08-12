@@ -58,6 +58,13 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'andresmorales.com.co',
       },
+      // Pexels (illustrative photos for the "Cómo funciona" home blocks).
+      // Pagespeed 2026-08-12: serving original JPEG was 84 KiB; next/image
+      // auto-converts to WebP and serves responsive sizes.
+      {
+        protocol: 'https',
+        hostname: 'images.pexels.com',
+      },
       // Tier 14: barriotech.com.co + www variant. Both serve the same
       // Next.js instance behind Caddy; listed separately so /next/image
       // can optimize OG previews shared from either. www is the canonical
