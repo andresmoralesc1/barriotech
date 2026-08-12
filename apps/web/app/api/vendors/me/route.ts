@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
 
-    if (auth.role !== 'seller') {
+    if (auth.role !== 'seller' && auth.role !== 'service') {
       return NextResponse.json({ error: 'Solo vendedores pueden acceder' }, { status: 403 })
     }
 
@@ -53,6 +53,17 @@ export async function GET(req: NextRequest) {
        ORDER BY v.created_at DESC`,
       [auth.userId]
     )
+
+    // Task 6: service users who skipped the map checkbox have no vendor row.
+    // Return 404 so the client can distinguish "no vendor yet" from
+    // "vendor exists" (200 + empty vendors is the seller-with-no-vendor
+    // shape preserved for backwards compat with the existing seller tests).
+    if (result.rows.length === 0 && auth.role === 'service') {
+      return NextResponse.json(
+        { error: 'vendor_not_found', code: 'vendor_not_found' },
+        { status: 404 }
+      )
+    }
 
     // Map snake_case → camelCase for the client. Anything not listed here is
     // intentionally omitted (e.g. internal flags, raw IDs).
@@ -159,7 +170,7 @@ export async function PATCH(req: NextRequest) {
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
 
-    if (auth.role !== 'seller') {
+    if (auth.role !== 'seller' && auth.role !== 'service') {
       return NextResponse.json({ error: 'Solo vendedores pueden editar su perfil' }, { status: 403 })
     }
 

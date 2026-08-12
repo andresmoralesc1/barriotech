@@ -355,3 +355,83 @@ test('GET /api/vendors?category=belleza returns the travels-modality vendor (E2E
   assert.equal(r.status, 200)
   assert.ok(r.body.vendors.length >= 1)
 })
+
+// --- Task 6: service role can POST products (service-endpoint gate wider) ---
+
+test('service user can POST a service-kind product', async () => {
+  // Register a fresh service user with wantsMap=true so the auto-bootstrap
+  // creates a vendor row — POST /api/products requires a vendor the user
+  // owns. Then the role gate is the only thing left to test: with the gate
+  // open to service, the POST should succeed (201).
+  const ts = Date.now() + Math.random()
+  const email = `svc-prod-${ts}@barriotech-test.com`
+  const phone = `+57305${String(ts).slice(-8)}`
+  const password = 'SvcProd123!'
+  const res = await fetchJSON('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email, password, name: 'Svc Prod',
+      phone, cityId: 'bogota',
+      role: 'service', wantsMap: true,
+      acceptedTerms: true, acceptedPrivacy: true,
+    }),
+  })
+  assert.equal(res.status, 200, `register failed: ${JSON.stringify(res.body)}`)
+  const setCookie = res.headers.get('set-cookie') || ''
+  const cookie = setCookie.split(';')[0]
+  // Origin matches APP_ORIGIN so requireSameOrigin() passes (CSRF guard).
+  const post = await fetchJSON('/api/products', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Cookie: cookie,
+      Origin: 'https://barriotech.com.co',
+    },
+    body: JSON.stringify({
+      name: 'Clase de yoga ' + ts,
+      description: '60 minutos a domicilio',
+      price: 50000,
+      kind: 'service',
+      duration_minutes: 60,
+      modality: 'travels',
+      pricing_unit: 'session',
+      category: 'bienestar',
+    }),
+  })
+  assert.equal(post.status, 201,
+    `service POST /api/products should be 201, got ${post.status}: ${JSON.stringify(post.body)}`)
+})
+
+test('buyer cannot POST a service-kind product', async () => {
+  // A buyer can register but should be rejected by the role gate.
+  const ts = Date.now() + Math.random()
+  const email = `byr-prod-${ts}@barriotech-test.com`
+  const res = await fetchJSON('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email, password: 'ByrProd123!',
+      name: 'Byr Prod', phone: `+57306${String(ts).slice(-8)}`,
+      cityId: 'bogota', role: 'buyer',
+      acceptedTerms: true, acceptedPrivacy: true,
+    }),
+  })
+  assert.equal(res.status, 200, `register failed: ${JSON.stringify(res.body)}`)
+  const cookie = (res.headers.get('set-cookie') || '').split(';')[0]
+  const post = await fetchJSON('/api/products', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Cookie: cookie,
+      Origin: 'https://barriotech.com.co',
+    },
+    body: JSON.stringify({
+      name: 'X', description: 'Y', price: 100,
+      kind: 'service', duration_minutes: 60,
+      modality: 'travels', pricing_unit: 'session',
+    }),
+  })
+  assert.equal(post.status, 403,
+    `buyer POST should be 403, got ${post.status}: ${JSON.stringify(post.body)}`)
+})

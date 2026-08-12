@@ -442,3 +442,61 @@ test('Sprint 11 B-AUTH-3: GET /api/vendors?active=true returns vendors without G
   assert.ok(data.vendors.every(v => v.isActive === true),
     'every returned vendor should have isActive=true')
 })
+
+// --- Task 6: service role can read/edit /api/vendors/me ---
+
+test('service user with wantsMap=true gets 200 + studio vendor on GET /api/vendors/me', async () => {
+  // Registers a service user with wantsMap=true (auto-bootstraps a
+  // station_type='studio' vendor row). The GET endpoint must accept
+  // role='service' and return the vendor in the new shape.
+  const ts = Date.now() + Math.random()
+  const email = `svc-vm-${ts}@barriotech-test.com`
+  const phone = `+57307${String(ts).slice(-8)}`
+  const res = await fetchJSON('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email, password: 'SvcVm123!',
+      name: 'Svc VM', phone, cityId: 'bogota',
+      role: 'service', wantsMap: true,
+      acceptedTerms: true, acceptedPrivacy: true,
+    }),
+  })
+  assert.equal(res.status, 200, `register failed: ${JSON.stringify(res.body)}`)
+  const cookie = (res.headers.get('set-cookie') || '').split(';')[0]
+  const me = await fetchJSON('/api/vendors/me', {
+    headers: { Cookie: cookie },
+  })
+  assert.equal(me.status, 200,
+    `service+wantsMap=true GET should be 200, got ${me.status}: ${JSON.stringify(me.body)}`)
+  assert.ok(Array.isArray(me.body.vendors), 'response must have vendors array')
+  assert.ok(me.body.vendors.length >= 1, 'service+wantsMap=true must have a vendor row')
+  assert.equal(me.body.vendors[0].stationType, 'studio',
+    `station_type must be 'studio', got ${me.body.vendors[0].stationType}`)
+})
+
+test('service user with wantsMap=false gets 404 on GET /api/vendors/me', async () => {
+  // Service users who skipped the map checkbox have no vendor row.
+  // The endpoint must return 404 (not 200+empty, not 500) so the client
+  // can distinguish "no vendor yet" from "vendor exists".
+  const ts = Date.now() + Math.random()
+  const email = `svc-vm2-${ts}@barriotech-test.com`
+  const phone = `+57308${String(ts).slice(-8)}`
+  const res = await fetchJSON('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email, password: 'SvcVm2123!',
+      name: 'Svc VM2', phone, cityId: 'bogota',
+      role: 'service', wantsMap: false,
+      acceptedTerms: true, acceptedPrivacy: true,
+    }),
+  })
+  assert.equal(res.status, 200, `register failed: ${JSON.stringify(res.body)}`)
+  const cookie = (res.headers.get('set-cookie') || '').split(';')[0]
+  const me = await fetchJSON('/api/vendors/me', {
+    headers: { Cookie: cookie },
+  })
+  assert.equal(me.status, 404,
+    `service+wantsMap=false GET should be 404, got ${me.status}: ${JSON.stringify(me.body)}`)
+})

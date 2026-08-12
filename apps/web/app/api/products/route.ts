@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
     if (auth instanceof NextResponse) return auth
     const decoded = auth
 
-    if (decoded.role !== 'seller') {
+    if (decoded.role !== 'seller' && decoded.role !== 'service') {
       return NextResponse.json({ error: 'Solo vendedores pueden crear productos' }, { status: 403 })
     }
 

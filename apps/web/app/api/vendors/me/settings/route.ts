@@ -58,7 +58,7 @@ if (!rl.allowed) {
 
     const userId = auth.userId
 
-    if (auth.role !== 'seller') {
+    if (auth.role !== 'seller' && auth.role !== 'service') {
       return NextResponse.json({ error: 'Solo vendedores pueden editar su perfil' }, { status: 403 })
     }
 
