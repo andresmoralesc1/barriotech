@@ -39,6 +39,11 @@ const nextConfig = {
     // browsers get a JPEG/PNG fallback. ~30-50% weight reduction on
     // photo-heavy pages.
     formats: ['image/avif', 'image/webp'],
+    // Allow explicit quality values via next/image. Default is [75] only.
+    // Pagespeed 2026-08-12: HomeView step images use quality=60 to save
+    // ~10 KiB per image. Browser-native <img> AVIF preloads use the file
+    // directly — this only applies to next/image calls.
+    qualities: [60, 75],
     // Minimum cache TTL for optimized images. 1 year is safe because
     // the URL is content-hashed (changing the source = different URL).
     minimumCacheTTL: 60 * 60 * 24 * 365,

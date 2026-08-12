@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 // Photos from Pexels (Colombian street food / market scenes)
 const HERO_PHOTO = '/hero.jpg'
 const HERO_PHOTO_WEBP = '/hero.webp'
+const HERO_PHOTO_AVIF = '/hero.avif'
 const STEPS_PHOTOS = [
   'https://images.pexels.com/photos/8824105/pexels-photo-8824105.jpeg?auto=compress&w=600', // encuentra: persona con mapa
   'https://images.pexels.com/photos/37348090/pexels-photo-37348090.jpeg?auto=compress&w=600', // ordena: vendedor ambulante con piñas
@@ -97,8 +98,9 @@ export function HomeView() {
       <section className="relative min-h-[580px] flex items-center overflow-hidden">
         <div className="absolute inset-0">
           <picture>
+            <source srcSet={HERO_PHOTO_AVIF} type="image/avif" />
             <source srcSet={HERO_PHOTO_WEBP} type="image/webp" />
-            <img src={HERO_PHOTO} alt="Vendedores locales en Colombia" className="w-full h-full object-cover object-[right_center] md:object-[center_30%]" width="1280" height="467" />
+            <img src={HERO_PHOTO} alt="Vendedores locales en Colombia" className="w-full h-full object-cover object-[right_center] md:object-[center_30%]" width="1280" height="467" fetchPriority="high" />
           </picture>
           <div className="absolute inset-0 bg-gradient-to-r from-gray-900/90 via-gray-900/75 to-gray-900/30" />
         </div>
@@ -172,7 +174,7 @@ export function HomeView() {
             ].map((item) => (
               <div key={item.step} className="bg-white rounded-2xl overflow-hidden shadow-card hover:shadow-card-hover transition-shadow">
                 <div className="h-40 relative">
-                  <Image src={item.photo} alt={item.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />
+                  <Image src={item.photo} alt={item.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" quality={60} />
                   <div className="absolute top-3 left-3 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm">{item.step}</div>
                 </div>
                 <div className="p-5">

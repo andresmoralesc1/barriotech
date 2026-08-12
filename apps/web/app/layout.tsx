@@ -20,6 +20,21 @@ const bricolage = Bricolage_Grotesque({
   variable: '--font-bricolage',
 })
 
+// Preload the hero AVIF so the LCP image is discoverable from the initial
+// HTML. PageSpeed 2026-08-12 flagged the hero as "not discoverable in
+// initial document" — the <picture> renders client-side via React so the
+// browser can't start the image fetch until JS executes. The preload tag
+// kicks the request off in parallel with the JS download. AVIF is the
+// lightest variant (~26 KiB vs 58 KiB webp) and Chrome 85+/FF 93+/
+// Safari 16.4+ all support it; older browsers fall back to webp/jpg.
+const HERO_PRELOAD = {
+  rel: 'preload',
+  as: 'image',
+  href: '/hero.avif',
+  type: 'image/avif',
+  fetchPriority: 'high',
+} as const
+
 export const metadata: Metadata = {
   metadataBase: new URL('https://barriotech.com.co'),
   title: {
@@ -129,6 +144,7 @@ export default function RootLayout({
   return (
     <html lang="es-CO" className={bricolage.variable}>
       <head>
+        <link {...HERO_PRELOAD} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
