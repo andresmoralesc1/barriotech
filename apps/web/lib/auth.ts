@@ -201,7 +201,7 @@ export async function requireAuth(
  */
 export interface VerifiedUser {
   userId: string
-  role: 'buyer' | 'seller' | 'admin'
+  role: 'buyer' | 'seller' | 'service' | 'admin'
   emailVerified: true
 }
 
@@ -226,7 +226,7 @@ export async function requireVerifiedEmail(
   }
   return {
     userId: auth.userId,
-    role: auth.role as 'buyer' | 'seller' | 'admin',
+    role: auth.role as 'buyer' | 'seller' | 'service' | 'admin',
     emailVerified: true,
   }
 }

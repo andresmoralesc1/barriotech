@@ -11,7 +11,7 @@ import type { NextRequest } from 'next/server'
 export interface TokenPayload {
   userId: string
   email?: string
-  role: 'buyer' | 'seller' | 'admin'
+  role: 'buyer' | 'seller' | 'service' | 'admin'
   tokenVersion: number
 }
 
