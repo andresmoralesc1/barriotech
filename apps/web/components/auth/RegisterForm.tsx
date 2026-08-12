@@ -7,6 +7,7 @@ import { Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { CityInput } from '@/components/ui/CityInput'
 import { useStore } from '@/store/useStore'
+import type { UserRole } from '@/lib/core/types'
 
 interface Props {
   isLoading: boolean
@@ -14,7 +15,7 @@ interface Props {
   setError: (msg: string) => void
   setIsLoading: (b: boolean) => void
   /** Pre-selected role from the URL (?role=seller) or null. */
-  initialRole?: 'buyer' | 'seller'
+  initialRole?: UserRole
   /**
    * Where to send the user after a successful registration.
    *   - `'onboarding'` — seller → /onboarding, buyer → /map.
@@ -60,10 +61,11 @@ export function RegisterForm({
   const [altContact, setAltContact] = useState('')
   const [cityId, setCityId] = useState('')
   const [regPassword, setRegPassword] = useState('')
-  const [selectedRole, setSelectedRole] = useState<'buyer' | 'seller'>(initialRole)
+  const [selectedRole, setSelectedRole] = useState<UserRole>(initialRole)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [showOnMap, setShowOnMap] = useState(false)
 
   const isContactEmail = contact.includes('@')
   const contactInputMode = isContactEmail ? 'email' : 'tel'
@@ -103,6 +105,9 @@ export function RegisterForm({
       acceptedTerms,
       acceptedPrivacy,
     }
+    if (selectedRole === 'service') {
+      payload.wantsMap = showOnMap
+    }
     if (contact.includes('@')) {
       payload.email = contact
       if (altContact) payload.phone = altContact
@@ -136,10 +141,12 @@ export function RegisterForm({
         // the spread overrides only when the server doesn't include it.
         emailVerified: data.user.emailVerified ?? data.emailVerified ?? false,
       })
-      const target =
-        redirectTo === 'onboarding' && data.user.role === 'seller'
-          ? '/onboarding'
-          : '/map'
+      const role = data.user.role as UserRole
+      const wantsMap = Boolean(data.user.wantsMap)
+      const needsOnboarding =
+        redirectTo === 'onboarding' &&
+        (role === 'seller' || (role === 'service' && wantsMap))
+      const target = needsOnboarding ? '/onboarding' : '/map'
       router.push(target)
     } catch {
       setError('No pudimos conectarnos. Revisa tu internet e intenta de nuevo.')
@@ -151,7 +158,7 @@ export function RegisterForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Role selector — M-3: shadow + scale feedback when selected so the
           click feels like a real selection instead of a border-only toggle. */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <button
           type="button"
           onClick={() => setSelectedRole('buyer')}
@@ -180,7 +187,38 @@ export function RegisterForm({
           <div className="text-sm font-semibold text-gray-800">Vendedor</div>
           <div className="text-xs text-gray-500">Aparecer en el mapa</div>
         </button>
+        <button
+          type="button"
+          onClick={() => setSelectedRole('service')}
+          aria-pressed={selectedRole === 'service'}
+          className={`p-3 rounded-xl border-2 text-center transition-all duration-200 ease-out ${
+            selectedRole === 'service'
+              ? 'border-primary bg-orange-50 shadow-card-hover scale-[1.02]'
+              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          <div className="text-2xl mb-1">🛠️</div>
+          <div className="text-sm font-semibold text-gray-800">Servicio</div>
+          <div className="text-xs text-gray-500">A domicilio o con local</div>
+        </button>
       </div>
+
+      {selectedRole === 'service' && (
+        <label className="flex items-start gap-3 text-sm text-gray-700 cursor-pointer py-2.5 px-2 -mx-2 rounded hover:bg-gray-50 transition-colors min-h-[44px]">
+          <input
+            type="checkbox"
+            checked={showOnMap}
+            onChange={(e) => setShowOnMap(e.target.checked)}
+            className="mt-0.5 w-5 h-5 shrink-0 rounded border-gray-300 text-primary-700 focus:ring-primary"
+          />
+          <span>
+            Tengo un local/estudio físico y quiero aparecer en el mapa.
+            <span className="block text-xs text-gray-500 mt-0.5">
+              Si no tienes local, omite esta opción. Tus servicios se podrán buscar en /servicios igual.
+            </span>
+          </span>
+        </label>
+      )}
 
       <div>
         <label className="text-sm font-medium text-gray-700 mb-1 block">Nombre completo</label>
