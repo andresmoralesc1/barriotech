@@ -44,6 +44,13 @@ visibility — map visibility is a separate axis from catalog visibility.
 - **Dedicated `/dashboard-servicios` route.** Service users without map visibility go
   to `/map` after signup (same as buyer). They access their catalog via the same
   `/dashboard` entry point as sellers; copy differentiates the role.
+- **Login-page onboarding routing.** The `(auth)/login/page.tsx` always passes
+  `redirectTo='map'` to `RegisterForm`, so a service user with `wantsMap=true` who
+  signs up via the login card lands on `/map` instead of `/onboarding`. This is a
+  pre-existing inconsistency — sellers signing up via the login card have the same
+  gap. To be fixed in a follow-up by changing the login page to pass
+  `redirectTo='onboarding'` (the RegisterForm routing table in §4 already handles it
+  correctly when called that way). Out of scope here to keep the diff focused.
 
 ## Design
 
