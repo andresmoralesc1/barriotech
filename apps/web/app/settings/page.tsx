@@ -171,7 +171,13 @@ export default function SettingsPage() {
                 <p className="text-sm text-gray-500 truncate">{user.email}</p>
               </div>
               <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary-700 font-medium shrink-0">
-                {user.role === 'buyer' ? 'Comprador' : 'Vendedor'}
+                {user.role === 'buyer'
+                  ? 'Comprador'
+                  : user.role === 'seller'
+                  ? 'Vendedor'
+                  : user.role === 'service'
+                  ? 'Servicio'
+                  : 'Admin'}
               </span>
             </div>
 

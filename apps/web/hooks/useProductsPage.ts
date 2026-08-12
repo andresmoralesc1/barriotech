@@ -168,7 +168,7 @@ export function useProductsPage(): UseProductsPage {
 
   // Load vendorId + products on mount.
   useEffect(() => {
-    if (user?.role !== 'seller') {
+    if (user?.role !== 'seller' && user?.role !== 'service') {
       // Seller-only page. Role is immutable post-register, so redirect
       // non-sellers to the public map. If they need a seller account,
       // they must register a new one.

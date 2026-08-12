@@ -42,7 +42,7 @@ export function useEditProfile() {
   const [geoZoneRadiusM, setGeoZoneRadiusM] = useState<number>(500)
 
   useEffect(() => {
-    if (user?.role !== 'seller') {
+    if (user?.role !== 'seller' && user?.role !== 'service') {
       router.push('/map')
       return
     }

@@ -95,7 +95,7 @@ export function SellerOnboardingBanner() {
 
   // Only consider the banner when we have a logged-in seller.
   useEffect(() => {
-    if (!user || user.role !== 'seller') {
+    if (!user || (user.role !== 'seller' && user.role !== 'service')) {
       setShow(false)
       return
     }

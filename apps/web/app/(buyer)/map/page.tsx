@@ -75,7 +75,7 @@ export default function MapPage() {
 
   useEffect(() => {
     // Redirect sellers with vendorId to seller dashboard
-    if (user?.role === 'seller' && vendorId) {
+    if ((user?.role === 'seller' || user?.role === 'service') && vendorId) {
       router.push('/dashboard')
       return
     }
