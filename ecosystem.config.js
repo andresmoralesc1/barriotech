@@ -63,6 +63,18 @@ module.exports = {
         //   node -e 'console.log(require("crypto").randomBytes(48).toString("base64url"))'
         // (also pasted into apps/web/.env as canonical source).
         FIELD_AGENT_TOKEN: 'DPBLq4lHgXRGvpg_xLiZeXfQVpiRPLdf7YpGe46jQBkxDspuXFImifPU285lREeX',
+        // 2026-08-13: PM2 7.0.3's daemon inherits env from whoever launched
+        // it. If a stale (revoked) BREVO_API_KEY lives in the shell env
+        // when pm2 starts, the daemon propagates it to barriotech forks,
+        // overriding apps/web/.env — signups then silently fail because
+        // Brevo rejects the call with HTTP 401 "Key not found". The fix is
+        // to put the canonical (appsweb/.env) key here in `env:` so it
+        // wins over inherited shell env. env_file alone is not enough.
+        //
+        // IMPORTANT: do NOT commit a real Brevo key — GitHub's secret
+        // scanner blocks pushes. Copy the value from apps/web/.env and
+        // paste it locally; this block is the runtime override.
+        BREVO_API_KEY: '<paste from apps/web/.env>',
       },
       // Out-of-band log files. pm2-logrotate watches these and rotates when
       // either exceeds 50M. We keep 10 compressed copies.
