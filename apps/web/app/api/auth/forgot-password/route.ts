@@ -4,6 +4,10 @@ import pool from '@/lib/db'
 import { checkRateLimit, checkRateLimitByIdentifier } from '@/lib/rate-limit'
 import { getClientIp } from '@/lib/trusted-ip'
 import { sendPasswordResetEmail, hashToken } from '@/lib/email'
+import {
+  PASSWORD_RESET_TTL_MS,
+  PASSWORD_RESET_TTL_LABEL,
+} from '@/lib/token-ttl'
 import { randomBytes, createHash } from 'crypto'
 import { parseJsonBody } from '@/lib/parse-json'
 import { requireSameOrigin } from '@/lib/csrf'
@@ -78,6 +82,15 @@ export async function POST(req: NextRequest) {
 
     // Always do a DB lookup so timing is similar whether or not email exists.
     // Doesn't fully prevent enumeration but raises the bar.
+    //
+    // Audit 2026-08-13 M6: filtering `is_active = true` is intentional
+    // (no reset tokens for deactivated accounts), but it has a side
+    // effect: a user reactivated by an admin has no way back in via
+    // this endpoint. The response is still 200 (no enumeration), so
+    // they get the same "check your email" message — looks like the
+    // email just didn't arrive. Document this in the admin playbook;
+    // a future self-serve "reactivate via email" flow would be the
+    // fix.
     const result = await pool.query(
       'SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND is_active = true',
       [email]
@@ -96,10 +109,11 @@ export async function POST(req: NextRequest) {
       )
 
       // Mint a random plaintext token, store only its SHA-256 hash, send the
-      // plaintext in the email. 1h TTL matches the previous JWT behavior.
+      // plaintext in the email. TTL constant from lib/token-ttl.ts (audit
+      // 2026-08-13 M7) so the copy and the actual expiry can't drift.
       const plaintext = randomBytes(32).toString('base64url')
       const tokenHash = hashToken(plaintext)
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
+      const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS)
 
       await pool.query(
         `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
@@ -140,9 +154,11 @@ export async function POST(req: NextRequest) {
     // Audit 2026-08-13 U12: include ttlLabel so the client can render
     // the same TTL the email copy uses, without hardcoding 1h.
     return NextResponse.json({
-      message: 'Si el email existe, recibirás un enlace para restablecer tu contraseña.',
-      ttlLabel: '1 hora',
-    })
+    message: 'Si el email existe, recibirás un enlace para restablecer tu contraseña.',
+    // Audit 2026-08-13 U12/M7: client renders the same label as the
+    // email body copy. Comes from the canonical TTL constant.
+    ttlLabel: PASSWORD_RESET_TTL_LABEL,
+  })
   } catch (err) {
     logger.error(serializeErr(err), 'Forgot password error:')
     return NextResponse.json({ error: 'Error interno' }, { status: 500 })

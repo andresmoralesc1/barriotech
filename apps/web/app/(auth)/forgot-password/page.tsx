@@ -75,8 +75,15 @@ export default function ForgotPasswordPage() {
           <p className="text-gray-600 mb-6">
             Si el email está registrado, recibirás un enlace para restablecer tu contraseña en los próximos minutos.
           </p>
-          <p className="text-sm text-gray-500 mb-6">
+          <p className="text-sm text-gray-500 mb-2">
             El enlace expira en {ttlLabel}. Si no ves el email, revisa tu carpeta de spam o promociones.
+          </p>
+          {/* Audit 2026-08-13 U19: forgot-password now matches the
+              reset-password page's session-invalidation claim, so users
+              who recover through this flow know other devices will be
+              logged out. Same UI shape as reset-password success card. */}
+          <p className="text-sm text-gray-500 mb-6">
+            Cuando uses el enlace, cerraremos sesión en todos tus dispositivos por seguridad.
           </p>
           <Link href="/login" aria-label="Volver a iniciar sesión">
             <Button variant="outline" className="w-full">

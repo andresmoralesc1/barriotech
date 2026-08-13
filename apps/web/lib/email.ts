@@ -18,6 +18,11 @@
  */
 
 import { logger, serializeErr } from './logger'
+import {
+  EMAIL_VERIFICATION_TTL_MS,
+  EMAIL_VERIFICATION_TTL_LABEL,
+  PASSWORD_RESET_TTL_LABEL,
+} from './token-ttl'
 
 const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email'
 
@@ -108,7 +113,9 @@ async function sendEmail(args: SendArgs): Promise<{ ok: boolean; messageId?: str
 
 import { createHash, randomBytes } from 'crypto'
 
-const TOKEN_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+// Audit 2026-08-13 M7: TTL now lives in lib/token-ttl.ts. Import only the
+// constant here so the email template copy + the actual expiry share the
+// same source of truth.
 
 /** Issue a new verification token. Returns the PLAINTEXT token (only
  * sent to the user via email) and the SHA-256 hash (stored in DB). */
@@ -119,7 +126,7 @@ export function issueEmailVerificationToken(userId: string): {
 } {
   const token = randomBytes(32).toString('base64url')
   const tokenHash = hashToken(token)
-  const expiresAt = new Date(Date.now() + TOKEN_TTL_MS)
+  const expiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS)
   return { token, tokenHash, expiresAt }
 }
 
@@ -237,8 +244,8 @@ export async function sendVerificationEmail(args: {
     ? '<p style="font-size:14px;color:#6b7280;line-height:1.5;margin:0 0 16px;">Reenviamos este enlace porque lo solicitaste. El enlace anterior ya no es válido.</p>'
     : ''
   const html = emailShell({
-    title: 'Verifica tu email — expira en 24 horas',
-    preheader: 'Confirma tu email para activar tu cuenta de BarrioTech. El enlace expira en 24 horas.',
+    title: `Verifica tu email — expira en ${EMAIL_VERIFICATION_TTL_LABEL}`,
+    preheader: `Confirma tu email para activar tu cuenta de BarrioTech. El enlace expira en ${EMAIL_VERIFICATION_TTL_LABEL}.`,
     footer: 'register',
     bodyHtml: `
     <p style="font-size:16px;line-height:1.5;margin:0 0 16px;">${greeting}</p>
@@ -260,7 +267,7 @@ export async function sendVerificationEmail(args: {
       ${link}
     </p>
     <p style="font-size:14px;color:#6b7280;margin:16px 0 0;">
-      El enlace expira en 24 horas.
+      El enlace expira en ${EMAIL_VERIFICATION_TTL_LABEL}.
     </p>
     `,
   })
@@ -271,15 +278,15 @@ Confirma tu dirección de email para activar tu cuenta de BarrioTech.
 Abre este enlace en tu navegador:
 ${link}
 
-El enlace expira en 24 horas. Si no fuiste tú, ignora este mensaje.`
+El enlace expira en ${EMAIL_VERIFICATION_TTL_LABEL}. Si no fuiste tú, ignora este mensaje.`
 
   // Audit 2026-08-13 T6: tighter subject line — brand in sender name, not
   // subject. Adds urgency.
   return sendEmail({
     to: args.to,
     subject: args.isResend
-      ? 'Reenvío: verifica tu email — expira en 24 horas'
-      : 'Verifica tu email — expira en 24 horas',
+      ? `Reenvío: verifica tu email — expira en ${EMAIL_VERIFICATION_TTL_LABEL}`
+      : `Verifica tu email — expira en ${EMAIL_VERIFICATION_TTL_LABEL}`,
     html,
     text,
   })
@@ -335,8 +342,8 @@ export async function sendPasswordResetEmail(args: {
     : ''
 
   const html = emailShell({
-    title: 'Restablece tu contraseña — expira en 1 hora',
-    preheader: 'Restablece tu contraseña de BarrioTech. El enlace expira en 1 hora.',
+    title: `Restablece tu contraseña — expira en ${PASSWORD_RESET_TTL_LABEL}`,
+    preheader: `Restablece tu contraseña de BarrioTech. El enlace expira en ${PASSWORD_RESET_TTL_LABEL}.`,
     footer: 'reset',
     bodyHtml: `
     <p style="font-size:16px;line-height:1.5;margin:0 0 16px;">${greeting}</p>
@@ -358,7 +365,7 @@ export async function sendPasswordResetEmail(args: {
       ${link}
     </p>
     <p style="font-size:14px;color:#6b7280;margin:16px 0 0;">
-      El enlace expira en 1 hora.
+      El enlace expira en ${PASSWORD_RESET_TTL_LABEL}.
     </p>
     `,
   })
@@ -369,7 +376,7 @@ Recibimos una solicitud para restablecer la contraseña de tu cuenta de BarrioTe
 Abre este enlace en tu navegador:
 ${link}
 
-El enlace expira en 1 hora. Si no fuiste tú, ignora este mensaje.`
+El enlace expira en ${PASSWORD_RESET_TTL_LABEL}. Si no fuiste tú, ignora este mensaje.`
 
   return sendEmail({
     to: args.to,
