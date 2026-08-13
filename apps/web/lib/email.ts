@@ -169,28 +169,44 @@ function emailShell(opts: {
 <head>
   <meta charset="utf-8" />
   <meta name="color-scheme" content="light dark" />
+  <meta name="supported-color-schemes" content="light dark" />
   <title>${opts.title}</title>
+  ${/* Audit 2026-08-13 T13: minimal dark-mode overrides. iOS Mail + Gmail
+       dark mode otherwise leave the orange-50 background and slate-800
+       text as-is and produce unreadable text. Use prefers-color-scheme:
+       dark to invert the bg/fg/border colors. mso-hide keeps Outlook
+       desktop from applying the block. */ ''}
+  <style>
+    @media (prefers-color-scheme: dark) {
+      .email-body { background:#1c1917 !important; color:#f5f5f4 !important; }
+      .email-card { background:#292524 !important; color:#f5f5f4 !important; border-color:#44403c !important; }
+      .email-muted { color:#a8a29e !important; }
+      .email-hr { border-color:#44403c !important; }
+    }
+  </style>
 </head>
-<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#fff7ed;color:#1f2937;">
+<body class="email-body" style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#fff7ed;color:#1f2937;">
   ${/* Audit 2026-08-13 T4: hidden preheader that inbox clients use as
        preview text. Without this, Gmail/Outlook show the footer disclaimer
        in the inbox preview. */ ''}
   <span style="display:none;font-size:1px;color:#fff7ed;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">
     ${opts.preheader}
   </span>
-  <div style="max-width:560px;margin:0 auto;padding:32px 24px;">
-    <div style="text-align:center;margin-bottom:24px;">
+  ${/* Audit 2026-08-13 T21: role=presentation on the outer wrapper so
+       SR skip the chrome and read only the body content. */ ''}
+  <div role="presentation" style="max-width:560px;margin:0 auto;padding:32px 24px;" class="email-card">
+    <div role="presentation" style="text-align:center;margin-bottom:24px;">
       <h1 style="font-size:24px;margin:0;color:#f97316;">BarrioTech</h1>
     </div>
     ${opts.bodyHtml}
-    <hr style="border:none;border-top:1px solid #fde68a;margin:32px 0;" />
-    <p style="font-size:12px;color:#6b7280;text-align:center;margin:0 0 8px;">
+    <hr class="email-hr" style="border:none;border-top:1px solid #fde68a;margin:32px 0;" />
+    <p class="email-muted" style="font-size:12px;color:#6b7280;text-align:center;margin:0 0 8px;">
       ¿Problemas? Escríbenos a <a href="mailto:soporte@barriotech.com.co" style="color:${CTA_BG};text-decoration:underline;">soporte@barriotech.com.co</a>
     </p>
-    <p style="font-size:12px;color:#6b7280;text-align:center;margin:0 0 8px;">
+    <p class="email-muted" style="font-size:12px;color:#6b7280;text-align:center;margin:0 0 8px;">
       ${BUSINESS_ADDRESS}
     </p>
-    <p style="font-size:12px;color:#6b7280;text-align:center;margin:0;">
+    <p class="email-muted" style="font-size:12px;color:#6b7280;text-align:center;margin:0;">
       ${FOOTER_DISCLAIMER[opts.footer]}
     </p>
   </div>
