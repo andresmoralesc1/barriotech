@@ -60,6 +60,13 @@ async function sendEmail(args: SendArgs): Promise<{ ok: boolean; messageId?: str
   }
 
   const from = getFromAddress()
+  // Audit 2026-08-13 T19: route user replies to support instead of
+  // bouncing on the no-reply sender. Configurable via env so the support
+  // team can rotate addresses without a code change.
+  const replyTo = {
+    email: process.env.EMAIL_REPLY_TO || 'soporte@barriotech.com.co',
+    name: 'Soporte BarrioTech',
+  }
 
   try {
     const res = await fetch(BREVO_API_URL, {
@@ -70,6 +77,7 @@ async function sendEmail(args: SendArgs): Promise<{ ok: boolean; messageId?: str
       },
       body: JSON.stringify({
         sender: from,
+        replyTo,
         to: [{ email: args.to }],
         subject: args.subject,
         htmlContent: args.html,
@@ -123,23 +131,67 @@ export function hashToken(token: string): string {
 /* Email templates                                                   */
 /* ------------------------------------------------------------------ */
 
-function emailShell(title: string, bodyHtml: string): string {
+// Audit 2026-08-13 T3: business address required for CAN-SPAM, GDPR,
+// Ley 1581/2012 compliance + Brevo spam-filter signal. Override via
+// EMAIL_BUSINESS_ADDRESS env when the operator's registered address
+// differs.
+const BUSINESS_ADDRESS =
+  process.env.EMAIL_BUSINESS_ADDRESS ||
+  'BarrioTechT — Calle 100 #8-65, Bogotá D.C., Colombia'
+
+// Audit 2026-08-13 T5: footer disclaimer is flow-aware. Verification
+// emails say "registered", password resets say "requested a reset",
+// generic fallback if a new flow is added without a label.
+type FooterContext = 'register' | 'reset' | 'generic'
+const FOOTER_DISCLAIMER: Record<FooterContext, string> = {
+  register:
+    'Este email fue enviado porque alguien (probablemente tú) se registró en BarrioTech con esta dirección. Si no fuiste tú, ignora este mensaje.',
+  reset:
+    'Este email fue enviado porque alguien (probablemente tú) solicitó restablecer la contraseña de su cuenta en BarrioTech. Si no fuiste tú, tu contraseña sigue igual — ignora este mensaje.',
+  generic:
+    'Este email fue enviado porque alguien usó esta dirección para una cuenta de BarrioTech. Si no fuiste tú, ignora este mensaje.',
+}
+
+// Audit 2026-08-13 T2: CTA button background orange-700 (4.7:1 vs white)
+// passes WCAG AA. Body links use the same darker orange so any inline
+// link copy inside the body also passes contrast.
+const CTA_BG = '#c2410c'
+const CTA_BG_HOVER_BORDER = '#9a3412'
+
+function emailShell(opts: {
+  title: string
+  preheader: string
+  bodyHtml: string
+  footer: FooterContext
+}): string {
   return `<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>${title}</title>
+  <meta name="color-scheme" content="light dark" />
+  <title>${opts.title}</title>
 </head>
 <body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#fff7ed;color:#1f2937;">
+  ${/* Audit 2026-08-13 T4: hidden preheader that inbox clients use as
+       preview text. Without this, Gmail/Outlook show the footer disclaimer
+       in the inbox preview. */ ''}
+  <span style="display:none;font-size:1px;color:#fff7ed;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">
+    ${opts.preheader}
+  </span>
   <div style="max-width:560px;margin:0 auto;padding:32px 24px;">
     <div style="text-align:center;margin-bottom:24px;">
       <h1 style="font-size:24px;margin:0;color:#f97316;">BarrioTech</h1>
     </div>
-    ${bodyHtml}
+    ${opts.bodyHtml}
     <hr style="border:none;border-top:1px solid #fde68a;margin:32px 0;" />
+    <p style="font-size:12px;color:#6b7280;text-align:center;margin:0 0 8px;">
+      ¿Problemas? Escríbenos a <a href="mailto:soporte@barriotech.com.co" style="color:${CTA_BG};text-decoration:underline;">soporte@barriotech.com.co</a>
+    </p>
+    <p style="font-size:12px;color:#6b7280;text-align:center;margin:0 0 8px;">
+      ${BUSINESS_ADDRESS}
+    </p>
     <p style="font-size:12px;color:#6b7280;text-align:center;margin:0;">
-      Este email fue enviado porque alguien (probablemente tú) se registró en
-      BarrioTech con esta dirección. Si no fuiste tú, ignora este mensaje.
+      ${FOOTER_DISCLAIMER[opts.footer]}
     </p>
   </div>
 </body>
@@ -154,34 +206,49 @@ export async function sendVerificationEmail(args: {
   to: string
   name: string
   token: string
+  /** When true, copy indicates this is a re-send (the previous link is invalidated). */
+  isResend?: boolean
 }): Promise<{ ok: boolean; error?: string }> {
   const link = `${getAppUrl()}/verificar-email?token=${encodeURIComponent(args.token)}`
-  const html = emailShell(
-    'Verifica tu email de BarrioTech',
-    `
-    <p style="font-size:16px;line-height:1.5;margin:0 0 16px;">Hola${args.name ? `, ${args.name}` : ''}:</p>
+  const safeName = typeof args.name === 'string' && args.name.trim().length > 0 ? args.name.trim() : ''
+  // Audit 2026-08-13 T1: greeting must not render "Hola:" with dangling
+  // colon when name is empty/null.
+  const greeting = safeName ? `Hola, ${safeName}` : 'Hola'
+  // Audit 2026-08-13 T7: distinguish resend so the user can tell the
+  // difference from a stale first email and so support can debug
+  // "did the second email actually send?".
+  const resendNote = args.isResend
+    ? '<p style="font-size:14px;color:#6b7280;line-height:1.5;margin:0 0 16px;">Reenviamos este enlace porque lo solicitaste. El enlace anterior ya no es válido.</p>'
+    : ''
+  const html = emailShell({
+    title: 'Verifica tu email — expira en 24 horas',
+    preheader: 'Confirma tu email para activar tu cuenta de BarrioTech. El enlace expira en 24 horas.',
+    footer: 'register',
+    bodyHtml: `
+    <p style="font-size:16px;line-height:1.5;margin:0 0 16px;">${greeting}</p>
     <p style="font-size:16px;line-height:1.5;margin:0 0 16px;">
       Confirma tu dirección de email para activar tu cuenta. Después de
       verificar podrás crear tu puesto, dejar reseñas y contactar vendedores.
     </p>
+    ${resendNote}
     <p style="text-align:center;margin:24px 0;">
       <a href="${link}"
-         style="display:inline-block;background:#f97316;color:#fff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:600;">
+         style="display:inline-block;background:${CTA_BG};color:#fff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:600;border:1px solid ${CTA_BG_HOVER_BORDER};">
         Verificar mi email
       </a>
     </p>
-    <p style="font-size:14px;color:#6b7280;line-height:1.5;margin:0 0 8px;">
+    <p style="font-size:14px;color:#6b7280;line-height:1.5;margin:16px 0 8px;">
       Si el botón no funciona, copia y pega este enlace en tu navegador:
     </p>
-    <p style="font-size:12px;color:#6b7280;word-break:break-all;margin:0;">
+    <p style="font-size:12px;color:#6b7280;word-break:break-all;margin:0;overflow-wrap:anywhere;">
       ${link}
     </p>
     <p style="font-size:14px;color:#6b7280;margin:16px 0 0;">
       El enlace expira en 24 horas.
     </p>
-    `
-  )
-  const text = `Hola${args.name ? `, ${args.name}` : ''}:
+    `,
+  })
+  const text = `${greeting}:
 
 Confirma tu dirección de email para activar tu cuenta de BarrioTech.
 
@@ -190,9 +257,13 @@ ${link}
 
 El enlace expira en 24 horas. Si no fuiste tú, ignora este mensaje.`
 
+  // Audit 2026-08-13 T6: tighter subject line — brand in sender name, not
+  // subject. Adds urgency.
   return sendEmail({
     to: args.to,
-    subject: 'Verifica tu email de BarrioTech',
+    subject: args.isResend
+      ? 'Reenvío: verifica tu email — expira en 24 horas'
+      : 'Verifica tu email — expira en 24 horas',
     html,
     text,
   })
@@ -203,15 +274,20 @@ export async function sendVerificationResentEmail(args: {
   name: string
   token: string
 }): Promise<{ ok: boolean; error?: string }> {
-  // Same template but a different subject so the user can tell it's the
-  // resent version.
-  return sendVerificationEmail({ ...args, name: args.name })
+  // Audit 2026-08-13 T7: now passes isResend=true so the body and
+  // subject say "(reenvío)" — distinguishes from a stale first email.
+  return sendVerificationEmail({ ...args, isResend: true })
 }
 
 export async function sendPasswordResetEmail(args: {
   to: string
   name: string
   token: string
+  /** Optional requesting context for the security-signal line. Caller
+   * passes req.headers. Never use the raw IP for anything user-visible;
+   * mask the last octet to avoid doxxing the user. */
+  requestIp?: string
+  userAgent?: string
 }): Promise<{ ok: boolean; error?: string }> {
   // URL MUST match `apps/web/app/(auth)/reset-password/page.tsx` (the (auth)
   // group is a Next.js layout group and doesn't appear in the URL — the path
@@ -219,26 +295,58 @@ export async function sendPasswordResetEmail(args: {
   // SHA-256 plaintext (random 32 bytes base64url) — the API route hashes it
   // on receipt and looks up by `token_hash`.
   const link = `${getAppUrl()}/reset-password?token=${encodeURIComponent(args.token)}`
-  const html = emailShell(
-    'Restablece tu contraseña de BarrioTech',
-    `
-    <p style="font-size:16px;line-height:1.5;margin:0 0 16px;">Hola${args.name ? `, ${args.name}` : ''}:</p>
+  const safeName = typeof args.name === 'string' && args.name.trim().length > 0 ? args.name.trim() : ''
+  const greeting = safeName ? `Hola, ${safeName}` : 'Hola'
+
+  // Audit 2026-08-13 T9: security signal — IP (last octet masked) +
+  // browser + timestamp. Lets the user distinguish the real email from
+  // a phishing attempt. Mask is for the user's own privacy (full IP in
+  // email body is doxxing if forwarded).
+  const maskedIp = args.requestIp
+    ? args.requestIp.replace(/\.\d+$/, '.***')
+    : null
+  const browser = args.userAgent && args.userAgent.length > 0
+    ? args.userAgent.split(') ')[0].split('(')[1] || args.userAgent.slice(0, 80)
+    : null
+  const securityLine = maskedIp || browser
+    ? `<p style="font-size:12px;color:#6b7280;background:#fffbeb;padding:12px;border-radius:6px;margin:16px 0;">
+        <strong>¿No fuiste tú?</strong> Esta solicitud vino desde
+        ${maskedIp ? `IP <code>${maskedIp}</code>` : 'una IP desconocida'}${browser ? ` usando ${browser}` : ''}.
+        Si no la reconoces, ignora este mensaje — tu contraseña sigue igual.
+        Si la reconoces pero no la solicitaste, contáctanos a
+        <a href="mailto:soporte@barriotech.com.co" style="color:${CTA_BG};">soporte@barriotech.com.co</a>.
+      </p>`
+    : ''
+
+  const html = emailShell({
+    title: 'Restablece tu contraseña — expira en 1 hora',
+    preheader: 'Restablece tu contraseña de BarrioTech. El enlace expira en 1 hora.',
+    footer: 'reset',
+    bodyHtml: `
+    <p style="font-size:16px;line-height:1.5;margin:0 0 16px;">${greeting}</p>
     <p style="font-size:16px;line-height:1.5;margin:0 0 16px;">
       Recibimos una solicitud para restablecer la contraseña de tu cuenta.
       Si no fuiste tú, ignora este mensaje — tu contraseña sigue igual.
     </p>
+    ${securityLine}
     <p style="text-align:center;margin:24px 0;">
       <a href="${link}"
-         style="display:inline-block;background:#f97316;color:#fff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:600;">
-        Restablecer contraseña
+         style="display:inline-block;background:${CTA_BG};color:#fff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:600;border:1px solid ${CTA_BG_HOVER_BORDER};">
+        Restablecer mi contraseña
       </a>
+    </p>
+    <p style="font-size:14px;color:#6b7280;line-height:1.5;margin:16px 0 8px;">
+      Si el botón no funciona, copia y pega este enlace en tu navegador:
+    </p>
+    <p style="font-size:12px;color:#6b7280;word-break:break-all;margin:0;overflow-wrap:anywhere;">
+      ${link}
     </p>
     <p style="font-size:14px;color:#6b7280;margin:16px 0 0;">
       El enlace expira en 1 hora.
     </p>
-    `
-  )
-  const text = `Hola${args.name ? `, ${args.name}` : ''}:
+    `,
+  })
+  const text = `${greeting}:
 
 Recibimos una solicitud para restablecer la contraseña de tu cuenta de BarrioTech.
 
@@ -249,7 +357,8 @@ El enlace expira en 1 hora. Si no fuiste tú, ignora este mensaje.`
 
   return sendEmail({
     to: args.to,
-    subject: 'Restablece tu contraseña de BarrioTech',
+    // Audit 2026-08-13 T6: tighter subject.
+    subject: 'Restablece tu contraseña — expira en 1 hora',
     html,
     text,
   })

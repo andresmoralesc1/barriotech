@@ -117,10 +117,15 @@ export async function POST(req: NextRequest) {
       // user-facing response is the same generic message either way (no
       // enumeration).
       try {
+        // Audit 2026-08-13 T9: pass request IP + UA so the reset email can
+        // show a security-signal line ("if you didn't request this from
+        // IP X on Chrome, ...").
         const sendRes = await sendPasswordResetEmail({
           to: email.toLowerCase(),
           name,
           token: plaintext,
+          requestIp: ip,
+          userAgent: req.headers.get('user-agent') || undefined,
         })
         if (!sendRes.ok) {
           // Audit 2026-08-13 M1: log identifier hash, not raw email, so PII
