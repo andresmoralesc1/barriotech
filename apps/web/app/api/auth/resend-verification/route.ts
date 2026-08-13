@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger, serializeErr } from '@/lib/logger'
 import pool from '@/lib/db'
-import { checkRateLimit } from '@/lib/rate-limit'
+import { checkRateLimit, checkRateLimitByIdentifier } from '@/lib/rate-limit'
 import { getClientIp } from '@/lib/trusted-ip'
 import { issueEmailVerificationToken, sendVerificationEmail } from '@/lib/email'
 import { parseJsonBody } from '@/lib/parse-json'
@@ -44,10 +44,18 @@ export async function POST(req: NextRequest) {
 
   // Per-email rate limit (3/hour) — even if attacker rotates IPs, they
   // can't hammer a single victim with resend spam.
-  const emailLimit = await checkRateLimit(email, 'resend_verification_email', 3, 60 * 60 * 1000)
+  // Audit 2026-08-13 C1: was checkRateLimit(email, ...) which was IP-keyed
+  // internally — defeating the per-email intent. Use the identifier-keyed
+  // helper so the limit is independent of source IP.
+  const emailLimit = await checkRateLimitByIdentifier(
+    req, email, 'resend_verification_email', 3, 60 * 60 * 1000,
+  )
   if (!emailLimit.allowed) {
+    // Audit 2026-08-13 M2: return 429 with Retry-After so the client UI can
+    // disable the resend button instead of letting the user keep hammering.
     return NextResponse.json(
-      { message: 'Si la cuenta existe, recibirás un nuevo email de verificación.' }
+      { message: 'Si la cuenta existe, recibirás un nuevo email de verificación.' },
+      { status: 429, headers: { 'Retry-After': String(emailLimit.retryAfter) } }
     )
   }
 
@@ -68,10 +76,15 @@ export async function POST(req: NextRequest) {
   }
   const user = result.rows[0]
 
-  // If already verified, no-op. Return 200 to keep the API idempotent.
+  // Audit 2026-08-13 C3: collapse the "already verified" branch to the
+  // generic message. Previously this leaked the account's verification
+  // state (3 distinguishable responses = enumeration oracle). Now the
+  // generic message is returned for both "exists + unverified" and
+  // "exists + verified" — the only difference is no email is sent in
+  // the verified case (which the client can't observe).
   if (user.email_verified) {
     return NextResponse.json(
-      { message: 'Este email ya está verificado. Puedes iniciar sesión.' }
+      { message: 'Si la cuenta existe, recibirás un nuevo email de verificación.' }
     )
   }
 

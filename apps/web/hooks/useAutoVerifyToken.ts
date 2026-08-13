@@ -55,6 +55,15 @@ export function useAutoVerifyToken(): AutoVerifyState {
     const token = searchParams.get('token')
     if (!token) return
 
+    // Audit 2026-08-13 I6: strip the token from the URL *before* firing
+    // the request so a browser refresh mid-fetch doesn't leak the token
+    // via the Referer header on any subsequent navigation, and so the
+    // token doesn't sit in browser history for the full duration of the
+    // network call.
+    const url = new URL(window.location.href)
+    url.searchParams.delete('token')
+    router.replace(url.pathname + url.search, { scroll: false })
+
     let cancelled = false
     setVerifying(true)
     setResult(null)
@@ -75,11 +84,14 @@ export function useAutoVerifyToken(): AutoVerifyState {
           if (user) {
             useStore.setState({ user: { ...user, emailVerified: true } })
           }
-          // Drop ?token= so a refresh doesn't re-trigger.
+          // Audit 2026-08-13 I6: token was already stripped before fetch;
+          // here we only need to add ?verified=1 so a refresh doesn't
+          // re-trigger. (router.replace here is also defensive in case
+          // the URL had the token and the pre-fetch strip failed.)
           const url = new URL(window.location.href)
           url.searchParams.delete('token')
           url.searchParams.set('verified', '1')
-          router.replace(url.pathname + url.search)
+          router.replace(url.pathname + url.search, { scroll: false })
           setResult({ ok: true, message: DEFAULT_OK_MESSAGE })
         } else {
           setResult({

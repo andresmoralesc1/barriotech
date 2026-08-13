@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { logger, serializeErr } from '@/lib/logger'
 import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
-import { checkRateLimit } from '@/lib/rate-limit'
+import { checkRateLimit, checkRateLimitByIdentifier } from '@/lib/rate-limit'
 import { getClientIp } from '@/lib/trusted-ip'
 import { hashToken } from '@/lib/email'
 import { parseJsonBody } from '@/lib/parse-json'
@@ -30,6 +30,27 @@ export async function POST(req: NextRequest) {
       { error: 'Demasiados intentos. Intenta más tarde.' },
       { status: 429, headers: { 'Retry-After': String(retryAfter) } }
     )
+  }
+
+  // Audit 2026-08-13 I3: per-token rate limit too. 256-bit tokens aren't
+  // brute-forceable, but if a plaintext token leaks (email forwarding,
+  // screenshot, accidental paste) + rotating IPs the attacker can retry
+  // until expiry. Hash the token first so we don't put plaintexts in
+  // rate_limit_attempts.
+  const parsedForRate = await parseJsonBody<{ token?: unknown }>(req)
+  const tokenHashForRate = parsedForRate.ok && typeof parsedForRate.body.token === 'string'
+    ? hashToken(parsedForRate.body.token)
+    : null
+  if (tokenHashForRate) {
+    const tokenLimit = await checkRateLimitByIdentifier(
+      req, tokenHashForRate, 'reset_password_token', 10, 60 * 60 * 1000,
+    )
+    if (!tokenLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Demasiados intentos. Intenta más tarde.' },
+        { status: 429, headers: { 'Retry-After': String(tokenLimit.retryAfter) } }
+      )
+    }
   }
 
   const client = await pool.connect()
@@ -103,18 +124,34 @@ export async function POST(req: NextRequest) {
 
     const passwordHash = await bcrypt.hash(password, 13)
 
+    // Audit 2026-08-13 I2: validate the password UPDATE before burning the
+    // token. If the user was deactivated (is_active=false) between token
+    // issue and consumption, the previous order would burn the token AND
+    // fail to reset the password, locking the user out with no error path
+    // (forgot-password filters is_active=true too).
+    const userUpdate = await client.query(
+      `UPDATE users SET password_hash = $1
+       WHERE id = $2 AND is_active = true`,
+      [passwordHash, row.user_id]
+    )
+    if (userUpdate.rowCount === 0) {
+      await client.query('ROLLBACK')
+      return NextResponse.json(
+        { error: 'No se pudo actualizar la contraseña. Contacta a soporte.' },
+        { status: 400 }
+      )
+    }
+
     // 1) Mark token as used
     await client.query(
       `UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1`,
       [row.id]
     )
-    // 2) Update password on the user
-    await client.query(
-      `UPDATE users SET password_hash = $1
-       WHERE id = $2 AND is_active = true`,
-      [passwordHash, row.user_id]
-    )
-    // 3) Revoke all existing sessions for this user — same pattern as before
+    // 3) Revoke all existing sessions for this user. NOTE: relies on
+    // requireAuth (lib/auth.ts:159-166) checking profiles.token_version
+    // via isTokenRevoked — never call verifyToken() directly here or
+    // downstream without that revocation check, or the session-kill claim
+    // becomes a lie. (Audit 2026-08-13 I5.)
     await client.query(
       'UPDATE profiles SET token_version = token_version + 1 WHERE user_id = $1',
       [row.user_id]

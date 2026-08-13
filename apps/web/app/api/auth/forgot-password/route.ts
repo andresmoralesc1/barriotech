@@ -4,8 +4,16 @@ import pool from '@/lib/db'
 import { checkRateLimit, checkRateLimitByIdentifier } from '@/lib/rate-limit'
 import { getClientIp } from '@/lib/trusted-ip'
 import { sendPasswordResetEmail, hashToken } from '@/lib/email'
-import { randomBytes } from 'crypto'
+import { randomBytes, createHash } from 'crypto'
 import { parseJsonBody } from '@/lib/parse-json'
+import { requireSameOrigin } from '@/lib/csrf'
+
+// Audit 2026-08-13 (batch 1): short hash used in error logs instead of raw
+// email — same privacy pattern as login/route.ts. Lets ops correlate by
+// identifier without PII in logs.
+function hashForAudit(email: string): string {
+  return createHash('sha256').update(email.toLowerCase()).digest('base64').slice(0, 12)
+}
 
 /**
  * POST /api/auth/forgot-password
@@ -24,6 +32,7 @@ import { parseJsonBody } from '@/lib/parse-json'
  * used_at on consumption.
  */
 export async function POST(req: NextRequest) {
+    const csrf = requireSameOrigin(req); if (csrf) return csrf
   const ip = getClientIp(req)
 
   // Rate limit tighter than login: forgot-password emails are a phishing vector.
@@ -76,6 +85,16 @@ export async function POST(req: NextRequest) {
     const userId = result.rows[0]?.id as string | undefined
 
     if (userId) {
+      // Audit 2026-08-13 I1: invalidate any prior outstanding reset tokens for
+      // this user before issuing a new one. Defense in depth — mirrors the
+      // pattern in resend-verification. Limits the number of coexisting
+      // valid tokens to one per user, simplifies incident response.
+      await pool.query(
+        `UPDATE password_reset_tokens SET used_at = NOW()
+         WHERE user_id = $1 AND used_at IS NULL`,
+        [userId]
+      )
+
       // Mint a random plaintext token, store only its SHA-256 hash, send the
       // plaintext in the email. 1h TTL matches the previous JWT behavior.
       const plaintext = randomBytes(32).toString('base64url')
@@ -104,7 +123,9 @@ export async function POST(req: NextRequest) {
           token: plaintext,
         })
         if (!sendRes.ok) {
-          logger.error({ to: email, error: sendRes.error }, '[forgot-password] Email send failed:')
+          // Audit 2026-08-13 M1: log identifier hash, not raw email, so PII
+          // doesn't leak to log aggregators.
+          logger.error({ id: hashForAudit(email), error: sendRes.error }, '[forgot-password] Email send failed:')
         }
       } catch (emailErr) {
         logger.error(serializeErr(emailErr), '[forgot-password] Email error (non-fatal):')
