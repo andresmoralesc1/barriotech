@@ -26,7 +26,11 @@ function VerifyEmailContent() {
 
   const token = searchParams.get('token')
 
-  const [resendEmail, setResendEmail] = useState('')
+  // Audit 2026-08-13 U1: initialize from user.email ONCE, not on every
+  // render. The old `value={resendEmail || user?.email || ''}` pattern
+  // meant the user could never clear the field — the binding kept
+  // refilling it from the store. Single state, single source of truth.
+  const [resendEmail, setResendEmail] = useState<string>(user?.email ?? '')
   const [resendStatus, setResendStatus] = useState<null | { ok: boolean; message: string }>(null)
   const [sending, setSending] = useState(false)
 
@@ -59,7 +63,16 @@ function VerifyEmailContent() {
       const data = await r.json().catch(() => ({}))
       // The endpoint always returns a generic message whether the email
       // exists or not. We surface it identically to keep the API honest.
-      setResendStatus({ ok: r.ok, message: data.message || 'Email reenviado.' })
+      setResendStatus({
+        ok: r.ok,
+        // Audit 2026-08-13 U2: distinguish transport/business errors.
+        // 5xx = Brevo/network problem → real error. 4xx/200 = generic
+        // success (no-enumeration). 429 = rate-limited, surface throttled.
+        message:
+          r.status === 429
+            ? 'Has pedido muchos reenvíos. Espera unos minutos.'
+            : data.message || 'Email reenviado.',
+      })
     } catch {
       setResendStatus({ ok: false, message: 'Error de conexión. Intenta de nuevo.' })
     } finally {
@@ -90,6 +103,10 @@ function VerifyEmailContent() {
       {/* Result from verification */}
       {result && !verifying && (
         <div
+          // Audit 2026-08-13 U5: role + aria-live so screen readers
+          // announce the success/failure without focus needing to move.
+          role="status"
+          aria-live="polite"
           className={`p-4 rounded-xl mb-6 ${
             result.ok
               ? 'bg-green-50 border border-green-200 text-green-800'
@@ -117,7 +134,7 @@ function VerifyEmailContent() {
             <label className="text-sm font-medium text-gray-700 block mb-1">Tu email</label>
             <input
               type="email"
-              value={resendEmail || user?.email || ''}
+              value={resendEmail}
               onChange={(e) => setResendEmail(e.target.value)}
               required
               // Explicit autoComplete prevents browsers from guessing (and
@@ -142,6 +159,10 @@ function VerifyEmailContent() {
           </Button>
           {resendStatus && (
             <p
+              // Audit 2026-08-13 U5: aria-live so the message is
+              // announced when it appears.
+              role="status"
+              aria-live="polite"
               className={`text-sm text-center ${
                 resendStatus.ok ? 'text-gray-600' : 'text-red-600'
               }`}
@@ -153,7 +174,13 @@ function VerifyEmailContent() {
       )}
 
       <div className="text-center mt-6 pt-4 border-t border-gray-100">
-        <Link href="/" className="text-sm text-primary-700 hover:underline inline-flex items-center min-h-[44px] px-2">
+        <Link
+          href="/"
+          // Audit 2026-08-13 I4: noreferrer so the token-in-URL Referer
+          // doesn't leak when the user clicks this link.
+          rel="noreferrer noopener"
+          className="text-sm text-primary-700 hover:underline inline-flex items-center min-h-[44px] px-2"
+        >
           Volver al inicio
         </Link>
       </div>

@@ -20,14 +20,36 @@ function ResetPasswordContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState(false)
 
-  // If no token in URL, bounce to forgot-password immediately.
+  // If no token in URL, bounce to forgot-password. Audit 2026-08-13
+  // U3: keep the form rendered with a "Redirigiendo…" state so
+  // users with slow JS don't see a flash of empty content.
+  const [redirecting, setRedirecting] = useState(!token)
   useEffect(() => {
     if (!token) {
       router.replace('/forgot-password')
+    } else {
+      setRedirecting(false)
     }
   }, [token, router])
 
-  if (!token) return null
+  if (!token) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-8">
+        <Card variant="elevated" className="w-full max-w-md p-8 text-center">
+          <p className="text-gray-500">Redirigiendo…</p>
+        </Card>
+      </div>
+    )
+  }
+  if (redirecting) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-8">
+        <Card variant="elevated" className="w-full max-w-md p-8 text-center">
+          <p className="text-gray-500">Redirigiendo…</p>
+        </Card>
+      </div>
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -123,8 +145,11 @@ function ResetPasswordContent() {
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                aria-pressed={showPassword}
+                // Audit 2026-08-13 U4: removed tabIndex={-1} so keyboard users
+                // can tab to the toggle. aria-pressed announces the toggle
+                // state to AT.
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
-                tabIndex={-1}
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
@@ -142,7 +167,14 @@ function ResetPasswordContent() {
           />
 
           {error && (
-            <p className="text-red-700 text-sm bg-red-50 rounded-lg px-3 py-2">{error}</p>
+            <p
+              // Audit 2026-08-13 U5: role=alert so screen readers
+              // announce the error.
+              role="alert"
+              className="text-red-700 text-sm bg-red-50 rounded-lg px-3 py-2"
+            >
+              {error}
+            </p>
           )}
 
           <Button type="submit" className="w-full" size="lg" isLoading={isLoading} disabled={isLoading}>

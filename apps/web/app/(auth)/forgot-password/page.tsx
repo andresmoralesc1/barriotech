@@ -30,12 +30,19 @@ export default function ForgotPasswordPage() {
     }
 
     try {
-      await fetch('/api/auth/forgot-password', {
+      const r = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       })
-      // Always show success — never reveal whether email exists
+      // Audit 2026-08-13 U2: distinguish transport from business errors.
+      // 200/4xx → generic success (security — don't reveal if email exists).
+      // 5xx → real transport/server error, surface it so the user knows
+      // to retry rather than waiting for an email that won't come.
+      if (r.status >= 500) {
+        setError('No pudimos enviar el correo ahora. Intenta en unos minutos.')
+        return
+      }
       setSubmitted(true)
     } catch {
       setError('Error de conexión. Intenta de nuevo.')
@@ -94,7 +101,14 @@ export default function ForgotPasswordPage() {
           />
 
           {error && (
-            <p className="text-red-700 text-sm bg-red-50 rounded-lg px-3 py-2">{error}</p>
+            <p
+              // Audit 2026-08-13 U5: role=alert so screen readers
+              // announce the error.
+              role="alert"
+              className="text-red-700 text-sm bg-red-50 rounded-lg px-3 py-2"
+            >
+              {error}
+            </p>
           )}
 
           <Button type="submit" className="w-full" size="lg" isLoading={isLoading} disabled={isLoading}>
