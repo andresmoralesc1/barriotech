@@ -5,13 +5,18 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
-import { ArrowLeft, Mail, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Mail, CheckCircle, AlertCircle } from 'lucide-react'
+
+// Audit 2026-08-13 U12: pull reset-TTL from the API when available
+// (env-overridable), default to 1h matching the backend.
+const DEFAULT_RESET_TTL_LABEL = '1 hora'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [ttlLabel, setTtlLabel] = useState<string>(DEFAULT_RESET_TTL_LABEL)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -23,6 +28,9 @@ export default function ForgotPasswordPage() {
       setIsLoading(false)
       return
     }
+    // Audit 2026-08-13 U10: keep the cheap gate, but the real
+    // validation runs through <Input type="email"> + the API. No need
+    // to block on a regex here.
     if (!email.includes('@')) {
       setError('Email inválido')
       setIsLoading(false)
@@ -43,6 +51,11 @@ export default function ForgotPasswordPage() {
         setError('No pudimos enviar el correo ahora. Intenta en unos minutos.')
         return
       }
+      // Audit 2026-08-13 U12: if the API returns the canonical TTL label
+      // we use it; otherwise stay with the default. Defensive copy — keeps
+      // server-truth on the page.
+      const data = await r.json().catch(() => ({}))
+      if (typeof data?.ttlLabel === 'string') setTtlLabel(data.ttlLabel)
       setSubmitted(true)
     } catch {
       setError('Error de conexión. Intenta de nuevo.')
@@ -63,9 +76,9 @@ export default function ForgotPasswordPage() {
             Si el email está registrado, recibirás un enlace para restablecer tu contraseña en los próximos minutos.
           </p>
           <p className="text-sm text-gray-500 mb-6">
-            El enlace expira en 1 hora. Si no ves el email, revisa tu carpeta de spam.
+            El enlace expira en {ttlLabel}. Si no ves el email, revisa tu carpeta de spam o promociones.
           </p>
-          <Link href="/login">
+          <Link href="/login" aria-label="Volver a iniciar sesión">
             <Button variant="outline" className="w-full">
               <ArrowLeft size={16} className="mr-2" />
               Volver a iniciar sesión
@@ -101,14 +114,14 @@ export default function ForgotPasswordPage() {
           />
 
           {error && (
-            <p
-              // Audit 2026-08-13 U5: role=alert so screen readers
-              // announce the error.
-              role="alert"
-              className="text-red-700 text-sm bg-red-50 rounded-lg px-3 py-2"
-            >
-              {error}
-            </p>
+            // Audit 2026-08-13 U5: role=alert so screen readers
+            // announce the error.
+            // Audit 2026-08-13 U20: error UI now matches the verify-email
+            // banner pattern — icon + bg/border, not raw red text.
+            <div role="alert" className="flex items-start gap-2 text-sm bg-red-50 border border-red-200 text-red-800 rounded-xl px-3 py-2">
+              <AlertCircle size={18} className="shrink-0 mt-0.5" aria-hidden="true" />
+              <p>{error}</p>
+            </div>
           )}
 
           <Button type="submit" className="w-full" size="lg" isLoading={isLoading} disabled={isLoading}>
@@ -117,6 +130,7 @@ export default function ForgotPasswordPage() {
 
           <Link
             href="/login"
+            aria-label="Volver a iniciar sesión"
             className="flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-primary-700"
           >
             <ArrowLeft size={14} />

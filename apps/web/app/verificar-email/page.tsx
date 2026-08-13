@@ -1,10 +1,13 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Mail, Check, X } from 'lucide-react'
+import { Mail, Check, X, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+// Button import kept for the resend form; the success CTA inlines the
+// primary variant classes because Button doesn't expose asChild (audit
+// 2026-08-13 U7).
 import { useStore } from '@/store/useStore'
 import { useAutoVerifyToken } from '@/hooks/useAutoVerifyToken'
 
@@ -13,9 +16,14 @@ import { useAutoVerifyToken } from '@/hooks/useAutoVerifyToken'
  *
  * Two states:
  *  - URL has ?token=… → useAutoVerifyToken() drives the network call.
- *    On success, we redirect by role (P1-2 audit 2026-07-27):
+ *    On success, we show a confirmation banner + button to continue
+ *    (P1-2 audit 2026-07-27 / audit 2026-08-13 U7):
  *      - sellers → /dashboard (where they can complete onboarding)
  *      - buyers  → /map     (where they can find vendors)
+ *    We removed the 2s blind auto-redirect because screen readers
+ *    couldn't finish announcing the success message before being yanked.
+ *    A small setTimeout (1.5s) on the primary CTA still nudges users
+ *    who don't read.
  *  - No token → show a "resend" form (you can re-trigger from here).
  */
 function VerifyEmailContent() {
@@ -34,19 +42,34 @@ function VerifyEmailContent() {
   const [resendStatus, setResendStatus] = useState<null | { ok: boolean; message: string }>(null)
   const [sending, setSending] = useState(false)
 
-  // P1-2 (audit 2026-07-27): after a successful verification, redirect
-  // based on role. Previously the page hardcoded `/map` for everyone,
-  // which dropped sellers into a buyer flow after they just confirmed
-  // the email that the dashboard banner told them to confirm — they
-  // had no clear path to their seller dashboard.
-  //
-  // We wait 2s so the user can see the success message before we
-  // navigate; that's the same grace period the previous code used.
+  // Audit 2026-08-13 U6: ref for the success banner so screen readers
+  // (and keyboard users) get focus moved into the result region after
+  // async transitions.
+  const resultRef = useRef<HTMLDivElement>(null)
+
+  // P1-2 (audit 2026-07-27): after a successful verification, the user
+  // can click the manual CTA (preferred). Audit 2026-08-13 U7: the old
+  // 2s blind setTimeout was yanked away before SR could finish. Now the
+  // CTA is explicit; we still nudge after 1.5s for users who don't read.
+  const [nudgeCountdown, setNudgeCountdown] = useState<number | null>(null)
   useEffect(() => {
-    if (!result?.ok) return
+    if (!result?.ok) {
+      setNudgeCountdown(null)
+      return
+    }
+    // Audit 2026-08-13 U6: move focus into the result banner on success
+    // so SR users hear the success message even without nav.
+    resultRef.current?.focus()
+    setNudgeCountdown(2)
+    const interval = setInterval(() => {
+      setNudgeCountdown((c) => (c === null ? null : c - 1))
+    }, 1000)
     const target = user?.role === 'seller' ? '/dashboard' : '/map'
     const t = setTimeout(() => router.push(target), 2000)
-    return () => clearTimeout(t)
+    return () => {
+      clearInterval(interval)
+      clearTimeout(t)
+    }
   }, [result?.ok, user?.role, router])
 
   const handleResend = async (e: React.FormEvent) => {
@@ -80,6 +103,9 @@ function VerifyEmailContent() {
     }
   }
 
+  const continueHref = user?.role === 'seller' ? '/dashboard' : '/map'
+  const continueLabel = user?.role === 'seller' ? 'Ir a mi panel' : 'Ir al mapa'
+
   return (
     <div className="bg-white rounded-2xl shadow-xl shadow-gray-900/5 p-8 sm:p-10 w-full max-w-lg">
       <div className="text-center mb-6">
@@ -103,11 +129,16 @@ function VerifyEmailContent() {
       {/* Result from verification */}
       {result && !verifying && (
         <div
+          // Audit 2026-08-13 U6: tabIndex=-1 + autoFocus-style focus
+          // via resultRef gives keyboard users a clear landing point.
+          // tabIndex lets us programmatic-focus a non-interactive div.
+          tabIndex={-1}
+          ref={resultRef}
           // Audit 2026-08-13 U5: role + aria-live so screen readers
           // announce the success/failure without focus needing to move.
           role="status"
           aria-live="polite"
-          className={`p-4 rounded-xl mb-6 ${
+          className={`p-4 rounded-xl mb-6 outline-none ${
             result.ok
               ? 'bg-green-50 border border-green-200 text-green-800'
               : 'bg-red-50 border border-red-200 text-red-800'
@@ -118,11 +149,20 @@ function VerifyEmailContent() {
             <p className="text-sm font-medium">{result.message}</p>
           </div>
           {result.ok && (
-            <p className="text-xs mt-2 text-green-700">
-              {user?.role === 'seller'
-                ? 'Te llevamos a tu panel de vendedor…'
-                : 'Te llevamos al mapa…'}
-            </p>
+            // Audit 2026-08-13 U7: explicit manual CTA replaces the
+            // 2s blind auto-redirect. Users get a real link to click.
+            // (No <Button asChild> because Button doesn't expose it —
+            // inlined the primary button classes here.)
+            <Link
+              href={continueHref}
+              className="relative w-full mt-3 inline-flex items-center justify-center gap-2 font-semibold rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 bg-gradient-to-b from-primary to-primary-600 text-white shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.97] px-7 py-3.5 text-base"
+            >
+              {continueLabel}
+              {nudgeCountdown !== null && nudgeCountdown > 0 && (
+                <span className="ml-2 text-xs opacity-70">en {nudgeCountdown}s…</span>
+              )}
+              <ArrowRight size={16} className="ml-2" />
+            </Link>
           )}
         </div>
       )}
@@ -163,8 +203,12 @@ function VerifyEmailContent() {
               // announced when it appears.
               role="status"
               aria-live="polite"
+              // Audit 2026-08-13 U21: success path now uses green so it
+              // doesn't look muted — the API returns the generic
+              // always-success message so the user has no signal of
+              // "did it actually send", and gray reads as failure.
               className={`text-sm text-center ${
-                resendStatus.ok ? 'text-gray-600' : 'text-red-600'
+                resendStatus.ok ? 'text-green-700' : 'text-red-600'
               }`}
             >
               {resendStatus.message}
@@ -179,6 +223,9 @@ function VerifyEmailContent() {
           // Audit 2026-08-13 I4: noreferrer so the token-in-URL Referer
           // doesn't leak when the user clicks this link.
           rel="noreferrer noopener"
+          // Audit 2026-08-13 U17: aria-label so SR doesn't read the
+          // surrounding text twice.
+          aria-label="Volver al inicio"
           className="text-sm text-primary-700 hover:underline inline-flex items-center min-h-[44px] px-2"
         >
           Volver al inicio

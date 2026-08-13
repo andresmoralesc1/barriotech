@@ -137,8 +137,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Audit 2026-08-13 U12: include ttlLabel so the client can render
+    // the same TTL the email copy uses, without hardcoding 1h.
     return NextResponse.json({
       message: 'Si el email existe, recibirás un enlace para restablecer tu contraseña.',
+      ttlLabel: '1 hora',
     })
   } catch (err) {
     logger.error(serializeErr(err), 'Forgot password error:')
