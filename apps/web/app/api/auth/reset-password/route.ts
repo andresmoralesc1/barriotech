@@ -37,22 +37,12 @@ export async function POST(req: NextRequest) {
   // screenshot, accidental paste) + rotating IPs the attacker can retry
   // until expiry. Hash the token first so we don't put plaintexts in
   // rate_limit_attempts.
-  const parsedForRate = await parseJsonBody<{ token?: unknown }>(req)
-  const tokenHashForRate = parsedForRate.ok && typeof parsedForRate.body.token === 'string'
-    ? hashToken(parsedForRate.body.token)
-    : null
-  if (tokenHashForRate) {
-    const tokenLimit = await checkRateLimitByIdentifier(
-      req, tokenHashForRate, 'reset_password_token', 10, 60 * 60 * 1000,
-    )
-    if (!tokenLimit.allowed) {
-      return NextResponse.json(
-        { error: 'Demasiados intentos. Intenta más tarde.' },
-        { status: 429, headers: { 'Retry-After': String(tokenLimit.retryAfter) } }
-      )
-    }
-  }
-
+  //
+  // Audit 2026-08-14: moved AFTER the body parse. The original code
+  // called parseJsonBody(req) twice — `req.json()` consumes the body
+  // stream once, so the second call got an empty stream and rejected
+  // every reset with 400 "JSON inválido". Dead-on-arrival for every
+  // password-reset link in the wild.
   const client = await pool.connect()
   try {
     const parsed = await parseJsonBody<{ token?: unknown; password?: unknown }>(req)
@@ -62,6 +52,20 @@ export async function POST(req: NextRequest) {
     const { token, password } = parsed.body
     if (typeof token !== 'string' || typeof password !== 'string' || !token || !password) {
       return NextResponse.json({ error: 'Faltan datos requeridos' }, { status: 400 })
+    }
+
+    // Per-token rate limit (defense in depth against leaked tokens +
+    // rotating IPs). Hash first so plaintexts never enter the
+    // rate_limit_attempts table.
+    const tokenHash = hashToken(token)
+    const tokenLimit = await checkRateLimitByIdentifier(
+      req, tokenHash, 'reset_password_token', 10, 60 * 60 * 1000,
+    )
+    if (!tokenLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Demasiados intentos. Intenta más tarde.' },
+        { status: 429, headers: { 'Retry-After': String(tokenLimit.retryAfter) } }
+      )
     }
 
     // Same strength rules as register — server enforces, client can't bypass.
@@ -84,8 +88,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const tokenHash = hashToken(token)
-
+    // tokenHash already computed above for the per-token rate limit; reuse it.
     await client.query('BEGIN')
 
     // Lock the token row to prevent races where two concurrent requests try
