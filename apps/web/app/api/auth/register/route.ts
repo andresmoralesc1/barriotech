@@ -161,7 +161,14 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Ley 1581/2012 art. 9 — consent must be explicit and informed.
-    if (!acceptedTerms || !acceptedPrivacy) {
+  // Audit 2026-08-14: previous `!acceptedTerms || !acceptedPrivacy`
+  // was a truthy check that any non-empty string passed — including
+  // the string "false". That created real user rows with consent_logs
+  // claiming consent that wasn't given. Strict equality + boolean
+  // type-check is the only correct gate.
+    const okT = acceptedTerms === true
+    const okP = acceptedPrivacy === true
+    if (!okT || !okP) {
       return NextResponse.json(
         { error: 'Debes aceptar los Términos y la Política de Tratamiento de Datos Personales' },
         { status: 400 }

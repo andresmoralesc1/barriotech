@@ -64,7 +64,13 @@ export async function PATCH(req: NextRequest) {
 
     // Update vendor location + set active
     await pool.query(
-      'UPDATE vendors SET latitude = $1, longitude = $2, is_active = true, location_updated_at = NOW() WHERE id = $3',
+      // Audit 2026-08-14: dropped `, is_active = true` from the SET clause.
+// Sharing GPS location doesn't override the seller's "I'm closed"
+// toggle — otherwise toggling off then any GPS ping flips them back
+// on, which made VendorVisibility meaningless. Activation is now
+// managed exclusively through /api/vendors/me/settings (or the
+// equivalent /api/vendors/[id]/location PUT with explicit isActive).
+      'UPDATE vendors SET latitude = $1, longitude = $2, location_updated_at = NOW() WHERE id = $3',
       [latitude, longitude, vendorId]
     )
 

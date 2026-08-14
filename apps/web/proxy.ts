@@ -9,7 +9,9 @@ const SELLER_ROUTES = ['/dashboard', '/profile/edit', '/products']
 // Routes that should redirect to /login if unauthenticated
 // Note: /favorites and /orders handle their own unauthenticated state
 // in-page (show a "Log in" CTA), so we don't force-redirect from the proxy.
-const AUTH_ROUTES = ['/settings', '/notifications', '/onboarding']
+// Audit 2026-08-14: added /admin so anonymous users get bounced to
+// /login?redirect=/admin instead of seeing the prerendered shell.
+const AUTH_ROUTES = ['/settings', '/notifications', '/onboarding', '/admin']
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
@@ -71,8 +73,14 @@ export async function proxy(req: NextRequest) {
   }
 
   // Seller-only routes — admins are exempt; they can view the dashboard.
+  // Audit 2026-08-13: 'service' added (was missing — Task 7 widened the
+  // client-side role check in components/seller/Dashboard.tsx:194 but
+  // the middleware here wasn't updated, so service users with a vendor
+  // row got a 307 to /map before the page ever rendered). Service-role
+  // users without a vendor row still get the redirect (Dashboard.tsx
+  // shows the empty state — fine).
   if (SELLER_ROUTES.some((r) => pathname.startsWith(r))) {
-    if (decoded.role !== 'seller' && decoded.role !== 'admin') {
+    if (decoded.role !== 'seller' && decoded.role !== 'service' && decoded.role !== 'admin') {
       const redirect = NextResponse.redirect(new URL('/map', req.url))
       redirect.headers.set('x-request-id', requestId)
       return redirect

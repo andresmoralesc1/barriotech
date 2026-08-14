@@ -203,6 +203,15 @@ export async function POST(req: NextRequest) {
       if (typeof rawPhotoUrl !== 'string') {
         return NextResponse.json({ error: 'photo_url inválido' }, { status: 400 })
       }
+      // Audit 2026-08-14: same ^https?:// check the PATCH handler uses.
+      // Without this, javascript:/data:/vbscript: payloads hit the
+      // products_photo_url_format DB CHECK and bubble up as 500.
+      if (!/^https?:\/\//i.test(rawPhotoUrl.trim())) {
+        return NextResponse.json(
+          { error: 'photo_url debe empezar con http:// o https://' },
+          { status: 400 }
+        )
+      }
       photo_url = rawPhotoUrl.trim() || null
     }
 

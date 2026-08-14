@@ -329,7 +329,12 @@ export const useStore = create<AppState>()(
         // on every page load — noisy console + wasted round-trip. We check
         // for the cookie first; if absent, the user is definitely
         // logged out and the API call is guaranteed to 401.
-        if (typeof document === 'undefined' || !document.cookie.includes('gps_session')) {
+        // Audit 2026-08-14: cookie check was `gps_session` — the OLD cookie
+        // name from before the auth refactor. Current cookies are `token`
+        // and `refresh-token`. The old check always returned false, so
+        // the /api/auth/me short-circuit never fired and every anonymous
+        // session was making a wasted round-trip.
+        if (typeof document === 'undefined' || !document.cookie.match(/(?:^|;\s*)(?:token|refresh-token)=/)) {
           state.setHasHydrated(true)
           return
         }

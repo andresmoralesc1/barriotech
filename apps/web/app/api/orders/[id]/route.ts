@@ -39,7 +39,16 @@ if (!rl.allowed) {
     }
     const profile = profileRes.rows[0]
 
-    const { status: nextStatus } = await req.json()
+    let nextStatus: string
+    try {
+      // Audit 2026-08-14: bare req.json() throws 500 on empty/malformed
+      // bodies. Same class as the reset-password double-parse bug —
+      // guard it with try/catch and return a clean 400.
+      const body = await req.json()
+      nextStatus = body?.status
+    } catch {
+      return NextResponse.json({ error: 'Body JSON requerido' }, { status: 400 })
+    }
 
     if (!['pending', 'accepted', 'ready', 'completed', 'cancelled'].includes(nextStatus)) {
       return NextResponse.json({ error: 'Estado inválido' }, { status: 400 })

@@ -1,3 +1,8 @@
+// Audit 2026-08-14: force-dynamic so the prerendered SSR shell can't
+// be served from cache to anonymous users (the proxy gate doesn't run
+// on cached responses in Next.js 16).
+export const dynamic = 'force-dynamic'
+
 /**
  * /admin — super admin dashboard (server component).
  *

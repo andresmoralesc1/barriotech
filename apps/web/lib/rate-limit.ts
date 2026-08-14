@@ -148,11 +148,14 @@ async function _checkOne(spec: CheckSpec): Promise<RateLimitResult> {
     spec.identifier ? 'identifier' :
                       'ip'
 
-  // CRIT-9: short statement timeout so a stuck rate-limit query can't hold
-  // a pool connection. 1.5s is generous for COUNT + a single index lookup
-  // and short enough to fail fast on a stuck DB.
-  await pool.query("SET LOCAL statement_timeout = '1500ms'")
-
+  // CRIT-9 + audit 2026-08-14: short statement timeout so a stuck rate-limit
+  // query can't hold a pool connection. Pool-level statement_timeout
+  // (configured in lib/db.ts) is enforced by Postgres for every query
+  // on every connection — unlike SET LOCAL which had no effect across
+  // pool.query() boundaries (different implicit txn, possibly different
+  // connection). 5s in db.ts is generous for COUNT + a single index
+  // lookup and short enough to fail fast on a stuck DB.
+  //
   // Always three positional params: $1 = key, $2 = bucket, $3 = since.
   // Static SQL, no string interpolation of user-controlled values.
   const countResult = await pool.query(
