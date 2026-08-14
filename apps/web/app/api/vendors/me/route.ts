@@ -288,6 +288,18 @@ export async function PATCH(req: NextRequest) {
     const values: unknown[] = []
     let paramIndex = 1
 
+    // Audit 2026-08-14 (Important #17): log unknown body keys so a
+    // client typo (e.g. {"desciption": "..."}) is visible — previously
+    // silently dropped.
+    const knownKeys = new Set(Object.keys(clientToDb))
+    const unknownKeys = Object.keys(body).filter((k) => !knownKeys.has(k))
+    if (unknownKeys.length > 0) {
+      logger.warn(
+        { vendorId: requestedVendorId, unknownKeys },
+        '[vendors/me PATCH] client sent unknown body keys (silently ignored)'
+      )
+    }
+
     for (const [clientKey, dbField] of Object.entries(clientToDb)) {
       if (body[clientKey] !== undefined) {
         updates.push(`${dbField} = $${paramIndex}`)

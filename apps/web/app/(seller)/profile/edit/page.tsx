@@ -1,8 +1,8 @@
+'use client';
+
 // Audit 2026-08-14: force-dynamic so the prerendered SSR shell can't
 // be served from cache to anonymous users.
 export const dynamic = 'force-dynamic'
-
-'use client'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'

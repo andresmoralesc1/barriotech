@@ -54,6 +54,11 @@ export async function POST(
     const auth = await requireAuth(req)
   if (auth instanceof NextResponse) return auth
 
+  // Audit 2026-08-14 (Important #16): defense-in-depth role gate.
+  if (auth.role !== 'seller' && auth.role !== 'service') {
+    return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+  }
+
   // Per-user rate limit. 10/min — sellers rarely add 10+ photos/minute.
   // /api/upload has the 20/hr cap on the binary itself; this caps the
   // metadata row inserts which can also be abused.

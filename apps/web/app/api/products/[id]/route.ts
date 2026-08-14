@@ -30,6 +30,14 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     const auth = await requireAuth(req)
   if (auth instanceof NextResponse) return auth
 
+  // Audit 2026-08-14 (Important #16): defense-in-depth role gate.
+  // Ownership is checked below; a buyer with no vendor row can never
+  // reach this code, but if the auto-bootstrap ever changes (or a
+  // buyer somehow owns a row) this prevents it.
+  if (auth.role !== 'seller' && auth.role !== 'service') {
+    return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+  }
+
   // Per-user rate limit. 20/min — product edits are bursty but rate-bounded.
   const rl = await checkRateLimitByUser(req, 'update_product', 20, 60_000)
   if (!rl.allowed) {

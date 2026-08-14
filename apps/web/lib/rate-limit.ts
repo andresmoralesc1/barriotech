@@ -156,40 +156,68 @@ async function _checkOne(spec: CheckSpec): Promise<RateLimitResult> {
   // connection). 5s in db.ts is generous for COUNT + a single index
   // lookup and short enough to fail fast on a stuck DB.
   //
-  // Always three positional params: $1 = key, $2 = bucket, $3 = since.
-  // Static SQL, no string interpolation of user-controlled values.
-  const countResult = await pool.query(
-    `SELECT COUNT(*)::int AS count
-       FROM rate_limit_attempts
-      WHERE ${insertColumn} = $1
-        AND bucket         = $2
-        AND attempted_at  >= $3`,
-    [keyValue, bucket, since]
-  )
-  const count: number = countResult.rows[0].count
-
-  if (count >= maxAttempts) {
-    const oldest = await pool.query(
-      `SELECT attempted_at FROM rate_limit_attempts
-        WHERE ${insertColumn} = $1
-          AND bucket         = $2
-          AND attempted_at  >= $3
-        ORDER BY attempted_at ASC LIMIT 1`,
-      [keyValue, bucket, since]
-    )
-    const retryAfter = oldest.rows.length
-      ? Math.ceil((oldest.rows[0].attempted_at.getTime() + windowMs - Date.now()) / 1000)
-      : Math.ceil(windowMs / 1000)
-    return { allowed: false, remaining: 0, retryAfter }
-  }
-
-  await pool.query(
-    `INSERT INTO rate_limit_attempts (${insertColumn}, bucket)
-     VALUES ($1, $2)`,
+  // Audit 2026-08-14 (Important #10): TOCTOU between SELECT COUNT and
+  // INSERT — two concurrent requests both saw count<max, both INSERTed,
+  // ending at count+2. Fix: take a Postgres advisory lock keyed on a
+  // hash of (key, bucket) so the SELECT + INSERT happen atomically per
+  // key. Advisory locks are session-scoped, released on pool end, no
+  // row contention. pg_try_advisory_lock returns false instantly if
+  // held; we briefly retry. pg_advisory_unlock in finally.
+  const lockKey = await pool.query(
+    `SELECT hashtext($1 || '|' || $2)::bigint AS k`,
     [keyValue, bucket]
   )
+  const lockId: bigint | string = lockKey.rows[0].k
+  const lockMax = 5
+  let acquired = false
+  for (let attempt = 0; attempt < lockMax; attempt++) {
+    const got = await pool.query('SELECT pg_try_advisory_lock($1) AS got', [lockId])
+    if (got.rows[0].got) { acquired = true; break }
+    if (attempt === lockMax - 1) break
+    await new Promise((r) => setTimeout(r, 5 + Math.random() * 10))
+  }
+  if (!acquired) {
+    return { allowed: false, remaining: 0, retryAfter: 1 }
+  }
 
-  return { allowed: true, remaining: maxAttempts - count - 1 }
+  try {
+    // Always three positional params: $1 = key, $2 = bucket, $3 = since.
+    // Static SQL, no string interpolation of user-controlled values.
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::int AS count
+         FROM rate_limit_attempts
+        WHERE ${insertColumn} = $1
+          AND bucket         = $2
+          AND attempted_at  >= $3`,
+      [keyValue, bucket, since]
+    )
+    const count: number = countResult.rows[0].count
+
+    if (count >= maxAttempts) {
+      const oldest = await pool.query(
+        `SELECT attempted_at FROM rate_limit_attempts
+          WHERE ${insertColumn} = $1
+            AND bucket         = $2
+            AND attempted_at  >= $3
+          ORDER BY attempted_at ASC LIMIT 1`,
+        [keyValue, bucket, since]
+      )
+      const retryAfter = oldest.rows.length
+        ? Math.ceil((oldest.rows[0].attempted_at.getTime() + windowMs - Date.now()) / 1000)
+        : Math.ceil(windowMs / 1000)
+      return { allowed: false, remaining: 0, retryAfter }
+    }
+
+    await pool.query(
+      `INSERT INTO rate_limit_attempts (${insertColumn}, bucket)
+       VALUES ($1, $2)`,
+      [keyValue, bucket]
+    )
+
+    return { allowed: true, remaining: maxAttempts - count - 1 }
+  } finally {
+    await pool.query('SELECT pg_advisory_unlock($1)', [lockId])
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -69,6 +69,22 @@ export function SiteHeader() {
     // by the time these resolve — if they fail, the cookies will
     // expire on their own (15 min access, 7 day refresh) and the
     // user is already on '/'.
+    // Audit 2026-08-14 (Important #13): the fire-and-forget storeLogout
+    // can be killed by navigation before it completes on flaky
+    // networks, leaving the client-side localStorage state stale.
+    // Use navigator.sendBeacon for the API call (survives navigation)
+    // so the server clears cookies even if the page unloads.
+    try {
+      const csrfToken = document.cookie
+        .split(';')
+        .map((c) => c.trim())
+        .find((c) => c.startsWith('csrf-token='))
+        ?.split('=')[1]
+      if (csrfToken && typeof navigator.sendBeacon === 'function') {
+        const blob = new Blob([JSON.stringify({})], { type: 'application/json' })
+        navigator.sendBeacon('/api/auth/logout?csrf=' + encodeURIComponent(csrfToken), blob)
+      }
+    } catch { /* best-effort — server-side expiry handles the rest */ }
     void storeLogout()
   }
 
