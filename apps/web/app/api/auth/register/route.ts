@@ -18,8 +18,12 @@ import {
 import { isCommonPassword } from '@/lib/common-passwords'
 import { sanitizeDisplayName } from '@/lib/sanitize'
 import { parseJsonBody } from '@/lib/parse-json'
+import { requireSameOrigin } from '@/lib/csrf'
 
 export async function POST(req: NextRequest) {
+  // Audit 2026-08-14: missing CSRF — only auth route without it (the
+  // other 7 all have it). Free signup-as-a-service from any origin.
+  const csrf = requireSameOrigin(req); if (csrf) return csrf
   const ip = getClientIp(req)
   const { allowed, retryAfter } = await checkRateLimit(ip, 'register', 20, 15 * 60 * 1000)
   if (!allowed) {
@@ -295,7 +299,15 @@ export async function POST(req: NextRequest) {
         const seedLat = cityCenter ? cityCenter[0] : null
         const seedLng = cityCenter ? cityCenter[1] : null
         const stationType = roleValue === 'service' ? 'studio' : 'mobile'
-        const isActive = roleValue === 'service' && wantsMapEnabled
+        // Audit 2026-08-14: vendors now start is_active=false for ALL
+        // roles (including service+wantsMap=true). Previously the
+        // service branch created an active vendor before the user
+        // verified their email — a stranger could publish a phone-
+        // tagged listing at the city center with no consent. Activation
+        // is now owned by verify-email/route.ts (flips is_active=true
+        // after the link click). Sellers still control their toggle
+        // via /api/vendors/me/settings.
+        const isActive = false
         await client.query(
           `INSERT INTO vendors (
             profile_id, name, slug, category, description,

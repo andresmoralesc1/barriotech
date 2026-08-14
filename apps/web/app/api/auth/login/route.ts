@@ -11,6 +11,7 @@ import { getClientIp } from '@/lib/trusted-ip'
 import { isEmail, normalizeEmail, normalizePhone } from '@/lib/auth-helpers'
 import { parseJsonBody } from '@/lib/parse-json'
 import { hashForAudit } from '@/lib/audit-hash'
+import { requireSameOrigin } from '@/lib/csrf'
 
 // Defense against user-enumeration via response timing:
 // On startup we hash a fixed string with bcrypt cost 12 so the dummy-hash path
@@ -25,6 +26,10 @@ function getDummyHash(): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
+  // Audit 2026-08-14: missing CSRF — only auth route without it (the
+  // other 7 all have it). Free signup-as-a-service from any origin;
+  // defense-in-depth alongside the middleware.
+  const csrf = requireSameOrigin(req); if (csrf) return csrf
   // Sprint 9 C.2: child logger with the request id, so every line emitted
   // by this handler shares the same correlation token. The id is also
   // echoed back on the response so the client (and a log aggregator) can
@@ -120,7 +125,7 @@ export async function POST(req: NextRequest) {
       result = await pool.query(
         `SELECT u.*, p.token_version FROM users u
          LEFT JOIN profiles p ON p.user_id = u.id
-         WHERE u.phone = $1`,
+         WHERE u.phone = $1 AND u.is_active = true`,
         [lookupValue]
       )
     }
@@ -145,21 +150,10 @@ export async function POST(req: NextRequest) {
     }
 
     const user = result.rows[0]
-
-    if (!user.is_active) {
-      // Same timing even for inactive users — hash to mask the deactivated branch.
-      await bcrypt.compare(password, user.password_hash)
-      // L5: deactivated accounts emit a separate audit tag so SIEM can
-      // spot attempts to brute-force suspended users specifically.
-      log.warn({
-        event: 'login_failure',
-        reason: 'account_inactive',
-        userId: user.id,
-        ip: getClientIp(req),
-      }, 'login failure (account inactive)')
-      return jsonWithRequestId(req, { error: 'Credenciales inválidas' }, { status: 401 })
-    }
-
+    // Audit 2026-08-14: is_active filter moved into the WHERE clause.
+    // Deactivated accounts never get bcrypt-compared, saving the
+    // ~250ms cost per attempt — defense against mass brute-force
+    // against known-deactivated identifiers.
     const validPassword = await bcrypt.compare(password, user.password_hash)
 
     if (!validPassword) {

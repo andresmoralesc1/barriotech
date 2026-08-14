@@ -10,8 +10,17 @@ import { requireSameOrigin } from '@/lib/csrf'
 import { checkRateLimitByUser } from '@/lib/rate-limit'
 const noStoreHeaders = { 'Cache-Control': 'no-store' } as const
 async function getUserFromDb(userId: string) {
+  // Audit 2026-08-14: join profiles to fetch wants_map so service-role
+  // users keep the flag after a page reload. Previously /api/auth/me
+  // didn't return wantsMap, so the store lost the flag client-side
+  // and onboarding logic silently treated service users as
+  // wantsMap=false.
   const result = await pool.query(
-    'SELECT id, email, name, role, phone, city_id, is_active, email_verified FROM users WHERE id = $1',
+    `SELECT u.id, u.email, u.name, u.role, u.phone, u.city_id,
+            u.is_active, u.email_verified, p.wants_map
+       FROM users u
+       LEFT JOIN profiles p ON p.user_id = u.id
+      WHERE u.id = $1`,
     [userId]
   )
   if (result.rows.length === 0) return null
@@ -26,6 +35,7 @@ async function getUserFromDb(userId: string) {
     cityId: u.city_id || '',
     avatarUrl: '',
     emailVerified: u.email_verified,
+    wantsMap: Boolean(u.wants_map),
   }
 }
 

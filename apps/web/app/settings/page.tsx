@@ -58,7 +58,10 @@ export default function SettingsPage() {
   }, [user])
 
   useEffect(() => {
-    if (user?.role === 'seller') {
+    // Audit 2026-08-14: include service-role users with wantsMap=true —
+    // they have a vendor row too and need the same management links.
+    const isOferente = user?.role === 'seller' || (user?.role === 'service' && user?.wantsMap === true)
+    if (isOferente) {
       fetch('/api/vendors/me', { credentials: 'include' })
         .then((r) => r.json())
         .then((data) => {
@@ -231,7 +234,7 @@ export default function SettingsPage() {
                 Ahora: si no hay vendorId redirigimos al onboarding para que
                 cree su perfil. Rara vez se ve desde que el register
                 auto-crea el vendor (commit del fix). */}
-            {user.role === 'seller' && (
+            {(user.role === 'seller' || (user.role === 'service' && user.wantsMap)) && (
               <Link
                 href={vendorId ? `/vendor/${vendorId}` : '/onboarding?redirectTo=/settings'}
                 className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-gray-700 hover:bg-gray-50 transition-colors"
@@ -246,7 +249,7 @@ export default function SettingsPage() {
             {/* Editar perfil del negocio — solo sellers.
                 Funciona en ambos casos: si tienen vendor editan, si no
                 la página /profile/edit muestra su propio CTA (opción B). */}
-            {user.role === 'seller' && (
+            {(user.role === 'seller' || (user.role === 'service' && user.wantsMap)) && (
               <Link
                 href="/profile/edit"
                 className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-gray-700 hover:bg-gray-50 transition-colors"

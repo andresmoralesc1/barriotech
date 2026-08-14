@@ -85,6 +85,17 @@ export async function POST(req: NextRequest) {
       `UPDATE users SET email_verified = true, email_verified_at = NOW() WHERE id = $1`,
       [row.user_id]
     )
+    // Audit 2026-08-14: now that the user is verified, flip any
+    // pre-existing vendor row to is_active=true. The register route
+    // (commit a1cbae9) now creates vendors with is_active=false
+    // regardless of role, so the listing doesn't go live until the
+    // user clicks the verification email. Sellers can still toggle
+    // off later via /api/vendors/me/settings.
+    await client.query(
+      `UPDATE vendors SET is_active = true, is_verified = true
+       WHERE profile_id = (SELECT id FROM profiles WHERE user_id = $1)`,
+      [row.user_id]
+    )
     await client.query('COMMIT')
 
     // Look up the email for the success payload (handy for the UI).

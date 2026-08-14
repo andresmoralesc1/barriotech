@@ -390,7 +390,11 @@ export function DashboardContent() {
                   BusinessHours (también naranja) y violaba color-contrast con
                   texto blanco sobre orange-500. Pasamos a outline que pide
                   atención sin gritarle al "Guardar horario". */}
-              {(!vendorData.name || !vendorData.category || !vendorData.photo_url) && (
+              // Audit 2026-08-14: photoUrl (not photo_url). The /api/vendors/me
+              // response uses camelCase; the snake_case field was never
+              // populated so this banner always showed even after a photo
+              // was uploaded.
+              {(!vendorData.name || !vendorData.category || !vendorData.photoUrl) && (
                 <Link href="/profile/edit">
                   <Card
                     variant="outlined"
