@@ -50,6 +50,104 @@ const MAGIC_BYTES: Record<string, MagicCheck> = {
 
 const ALLOWED_TYPES = Object.keys(MAGIC_BYTES) // ['image/jpeg','image/png','image/gif','image/webp']
 
+// Audit 2026-08-14 (M1): decompression-bomb dimensions decoder. Reads
+// just the header (no full decode) for the 4 whitelisted formats. Returns
+// { width, height } in pixels. We don't pull in `image-size` (~50KB+ for
+// its full decoder list) — only 4 formats are allowed in.
+//
+// Format header layout (each is a few bytes into the file):
+//   JPEG: SOF0/SOF2 marker at variable offset, segments iterated.
+//   PNG:  bytes 16-23 = width (4) + height (4) big-endian.
+//   GIF:  bytes 6-9 (logical screen) width/height little-endian.
+//   WebP: VP8/VP8L/VP8X chunks hold the dims at known offsets.
+function decodeImageDimensions(
+  buf: Buffer,
+  mime: string
+): { width: number; height: number } {
+  const fallback = { width: 0, height: 0 }
+  try {
+    if (mime === 'image/png') {
+      // PNG: width at bytes 16-19, height at 20-23, big-endian.
+      if (buf.length < 24) return fallback
+      return {
+        width: buf.readUInt32BE(16),
+        height: buf.readUInt32BE(20),
+      }
+    }
+    if (mime === 'image/gif') {
+      // GIF87a/89a: logical screen width (LE u16) at bytes 6-7, height
+      // at 8-9.
+      if (buf.length < 10) return fallback
+      return {
+        width: buf.readUInt16LE(6),
+        height: buf.readUInt16LE(8),
+      }
+    }
+    if (mime === 'image/jpeg') {
+      // Walk markers until we hit SOF0/SOF2 (0xC0/0xC2). Each segment
+      // starts with 0xFF + marker byte; SOI (0xFFD8) is the first 2 bytes.
+      // Segments with length have 2 bytes length following. Skip until SOF.
+      if (buf.length < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) return fallback
+      let i = 2
+      while (i < buf.length - 1) {
+        if (buf[i] !== 0xff) return fallback
+        const marker = buf[i + 1]
+        // Standalone markers (no length): RST0-7, SOI, EOI, TEM
+        if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) {
+          i += 2
+          continue
+        }
+        // SOF markers carry the dimensions
+        if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2 || marker === 0xc3 ||
+            (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) ||
+            (marker >= 0xcd && marker <= 0xcf)) {
+          if (i + 9 > buf.length) return fallback
+          return {
+            height: buf.readUInt16BE(i + 5),
+            width: buf.readUInt16BE(i + 7),
+          }
+        }
+        // Skip the segment using its 2-byte length field
+        if (i + 4 > buf.length) return fallback
+        const segLen = buf.readUInt16BE(i + 2)
+        i += 2 + segLen
+      }
+      return fallback
+    }
+    if (mime === 'image/webp') {
+      // WebP: RIFF....WEBP. Chunk fourcc at offset 12.
+      //   VP8  (lossy):  3 bytes signature, then 7 bytes width/height LE.
+      //   VP8L (lossless): 1 byte signature, then 4 bytes (LE) with dims.
+      //   VP8X (extended): 1 byte signature, then 3-byte width-1, 3-byte
+      //                    height-1 LE (each encoded 24-bit), then 2 flags.
+      if (buf.length < 30) return fallback
+      const fourcc = buf.toString('ascii', 12, 16)
+      if (fourcc === 'VP8 ') {
+        const w = buf.readUInt16LE(26) & 0x3fff
+        const h = buf.readUInt16LE(28) & 0x3fff
+        return { width: w, height: h }
+      }
+      if (fourcc === 'VP8L') {
+        const b0 = buf[21]
+        const b1 = buf[22]
+        const b2 = buf[23]
+        const b3 = buf[24]
+        const w = 1 + (((b1 & 0x3f) << 8) | b0)
+        const h = 1 + (((b3 & 0x0f) << 10) | (b2 << 2) | ((b1 & 0xc0) >> 6))
+        return { width: w, height: h }
+      }
+      if (fourcc === 'VP8X') {
+        const w = 1 + (buf[24] | (buf[25] << 8) | (buf[26] << 16))
+        const h = 1 + (buf[27] | (buf[28] << 8) | (buf[29] << 16))
+        return { width: w, height: h }
+      }
+    }
+  } catch {
+    // fall through
+  }
+  return fallback
+}
+
 function matchesMagic(buf: Buffer, mime: string): boolean {
   const check = MAGIC_BYTES[mime]
   if (!check) return false
@@ -58,14 +156,18 @@ function matchesMagic(buf: Buffer, mime: string): boolean {
 
 export async function POST(req: NextRequest) {
     const csrf = requireSameOrigin(req); if (csrf) return csrf
-  // Rate limit BEFORE auth — uploads are expensive (disk I/O).
-  // 20 uploads / hour / IP — generous for legit use, blocks storage abuse.
+  // Per-IP rate limit FIRST (before auth). Cheap anti-spam layer:
+  // blocks storage abuse from unidentified IPs without needing an
+  // authenticated user. 30/hr is generous for legit use.
+  // Audit 2026-08-14 (M4): Colombian mobile carriers CGNAT many users
+  // behind one IP, so the per-IP limit (BEFORE this audit) was busting
+  // legitimate users. We now ALSO apply a per-user limit after auth.
   const ip = getClientIp(req)
-  const { allowed, retryAfter } = await checkRateLimit(ip, 'upload', 20, 60 * 60 * 1000)
-  if (!allowed) {
+  const ipLimit = await checkRateLimit(ip, 'upload_ip', 30, 60 * 60 * 1000)
+  if (!ipLimit.allowed) {
     return NextResponse.json(
-      { error: 'Demasiadas subidas. Intenta más tarde.', retryAfter },
-      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+      { error: 'Demasiadas subidas desde esta IP. Intenta más tarde.', retryAfter: ipLimit.retryAfter },
+      { status: 429, headers: { 'Retry-After': String(ipLimit.retryAfter) } }
     )
   }
 
@@ -85,6 +187,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
     }
     const userId = auth.userId
+
+    // Per-user rate limit (post-auth). Companion to the per-IP cap
+    // above: catches the case where many users share one IP (CGNAT)
+    // and one genuine user is hammering. 30/hr is generous — a seller
+    // with 6 products updating photos every other day stays well under.
+    const userLimit = await checkRateLimit(userId, 'upload_user', 30, 60 * 60 * 1000)
+    if (!userLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Has subido demasiadas imágenes hoy. Intenta más tarde.', retryAfter: userLimit.retryAfter },
+        { status: 429, headers: { 'Retry-After': String(userLimit.retryAfter) } }
+      )
+    }
 
     const formData = await req.formData()
     const file = formData.get('file') as File | null
@@ -127,6 +241,25 @@ export async function POST(req: NextRequest) {
       )
       return NextResponse.json(
         { error: 'El contenido del archivo no coincide con el tipo declarado' },
+        { status: 400 }
+      )
+    }
+
+    // Audit 2026-08-14 (M1): decompression-bomb guard. A small file
+    // (10MB) can decode to 30GB+ in RAM and crash the Node process. Cap
+    // the decoded dimensions. 8000px is well above any sane upload
+    // (iPhone 15 Pro Max is 8000×6000; 12K is 12288×...; Barcelona's
+    // displays top out at 4K). Past this we're a victim of pixel-count
+    // multiplication attacks on the decoder.
+    const MAX_DIM = 8000
+    const dims = decodeImageDimensions(buffer, file.type)
+    if (dims.width > MAX_DIM || dims.height > MAX_DIM) {
+      logger.warn(
+        { mime: file.type, name: file.name, w: dims.width, h: dims.height, ip },
+        '[upload] Rejected: image dimensions exceed cap'
+      )
+      return NextResponse.json(
+        { error: `Imagen demasiado grande (${dims.width}×${dims.height}, máx ${MAX_DIM}px en cada lado)` },
         { status: 400 }
       )
     }
