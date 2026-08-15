@@ -73,8 +73,17 @@ export async function POST(req: NextRequest) {
     // P1-1 (audit 2026-07-27): require verified email before uploading
     // images (creating blob storage records). Photos are surfaced under
     // a vendor/product immediately.
-    const auth = await requireAuth(req)
+    //
+    // Audit 2026-08-14: previous code used requireAuth, not
+    // requireVerifiedEmail — the comment was a lie. A freshly-registered
+    // unverified user could upload to /storage. Also added role gate
+    // since a buyer with verified email shouldn't be writing to blob
+    // storage either.
+    const auth = await requireVerifiedEmail(req)
     if (auth instanceof NextResponse) return auth
+    if (auth.role !== 'seller' && auth.role !== 'service') {
+      return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+    }
     const userId = auth.userId
 
     const formData = await req.formData()

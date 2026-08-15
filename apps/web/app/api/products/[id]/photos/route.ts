@@ -51,7 +51,7 @@ export async function POST(
     // P1-1 (audit 2026-07-27): require verified email before adding a
     // product photo (creating new content). The dashboard banner promises
     // this gate.
-    const auth = await requireAuth(req)
+    const auth = await requireVerifiedEmail(req)
   if (auth instanceof NextResponse) return auth
 
   // Audit 2026-08-14 (Important #16): defense-in-depth role gate.
@@ -69,7 +69,6 @@ export async function POST(
       { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
     )
   }
-    if (auth instanceof NextResponse) return auth
 
     // Verify ownership: product must belong to a vendor owned by this user.
     const ownerCheck = await pool.query(
@@ -269,6 +268,15 @@ export async function PATCH(req: NextRequest, { params: paramsPromise }: { param
     let allInSupplied = true
     existingIds.forEach((id: string) => {
       if (!suppliedIds.has(id)) allInSupplied = false
+    })
+    // Audit 2026-08-14: symmetric check. Old code only verified
+    // existing ⊆ supplied — supplied UUIDs from another product passed
+    // through, and the newFirstRes SELECT WHERE product_id=…
+    // returned null for the foreign UUID, causing products.photo_url
+    // to be set to NULL for the legit cover photo. Now we reject
+    // any supplied id that doesn't belong to THIS product.
+    suppliedIds.forEach((id: string) => {
+      if (!existingIds.has(id)) allInSupplied = false
     })
     if (!allInSupplied) {
       return NextResponse.json(

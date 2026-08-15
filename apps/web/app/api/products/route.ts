@@ -87,8 +87,21 @@ export async function GET(req: NextRequest) {
     const kind = searchParams.get('kind')
     const includeDrafts = searchParams.get('includeDrafts') === 'true'
 
-    let query = 'SELECT id, vendor_id, name, description, price, photo_url, is_active, kind, duration_minutes, modality, pricing_unit, created_at FROM products WHERE 1=1'
+    // Audit 2026-08-14: JOIN vendors to filter soft-deleted (deleted_at IS NOT
+    // NULL) — otherwise products of deleted vendors leak to public
+    // listings. includeDrafts also bypasses is_active=false (so the
+    // seller can still see their own drafts) — but soft-deleted
+    // vendors stay hidden even in includeDrafts mode.
     const params: unknown[] = []
+    let query = `SELECT p.id, p.vendor_id, p.name, p.description, p.price, p.photo_url, p.is_active, p.kind, p.duration_minutes, p.modality, p.pricing_unit, p.created_at
+       FROM products p
+       JOIN vendors   v ON v.id = p.vendor_id
+      WHERE v.deleted_at IS NULL
+        AND (v.is_active = true${includeDrafts ? ' OR $' : ''})`
+    if (includeDrafts) {
+      query = query.replace(' OR $', ' OR $' + (params.length + 1))
+      params.push(true)
+    }
 
     if (vendorId) {
       // Reject malformed UUIDs up front so we don't hand a non-UUID string to
@@ -140,7 +153,7 @@ export async function POST(req: NextRequest) {
   try {
     // P1-1 (audit 2026-07-27): require verified email before a seller
     // can publish a new product. The dashboard banner promises this gate.
-    const auth = await requireAuth(req)
+    const auth = await requireVerifiedEmail(req)
 
     // Per-user rate limit on product creation. 10/min — sellers rarely
     // create more than a few products in a minute; bots would burst.
@@ -218,7 +231,23 @@ export async function POST(req: NextRequest) {
     // Migration 102: discriminator + 3 service-only fields.
     // Default 'product' so existing callers keep working. The DB CHECK
     // (products_kind_fields_consistent) rejects mismatched combos.
-    const kind: 'product' | 'service' = rawKind === 'service' ? 'service' : 'product'
+    //
+    // Audit 2026-08-14: strict validation. rawKind must be undefined,
+    // 'product', or 'service' — anything else (null, '', 'SERVICE',
+    // 123, []) returns 400 instead of being silently coerced. Prevents
+    // contract drift where the client thinks they set one kind and the
+    // server silently stores another.
+    let kind: 'product' | 'service' = 'product'
+    if (rawKind !== undefined) {
+      if (rawKind === 'product' || rawKind === 'service') {
+        kind = rawKind
+      } else {
+        return NextResponse.json(
+          { error: "kind debe ser 'product' o 'service'" },
+          { status: 400 }
+        )
+      }
+    }
     let duration_minutes: number | null = null
     let modality: 'on_site' | 'travels' | 'remote' | null = null
     let pricing_unit: 'unit' | 'hour' | 'session' | 'class' | null = null

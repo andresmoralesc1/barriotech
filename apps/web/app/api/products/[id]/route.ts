@@ -27,7 +27,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
     // P1-1 (audit 2026-07-27): require verified email before editing a
     // product. The dashboard banner promises this gate.
-    const auth = await requireAuth(req)
+    const auth = await requireVerifiedEmail(req)
   if (auth instanceof NextResponse) return auth
 
   // Audit 2026-08-14 (Important #16): defense-in-depth role gate.
@@ -46,7 +46,6 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
     )
   }
-    if (auth instanceof NextResponse) return auth
 
     // Verify ownership
     const check = await pool.query(
@@ -96,12 +95,27 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       if (typeof name !== 'string' || !name.trim()) {
         return NextResponse.json({ error: 'Nombre inválido' }, { status: 400 })
       }
+      // Audit 2026-08-14: cap name length BEFORE the DB so we return 400
+      // not 500. The DB CHECK rejects name > 200 with sqlstate 22023
+      // (numeric overflow) and the catch block only translates 22003
+      // (numeric_value_out_of_range), not 22023 — without this cap the
+      // user gets a generic 'Error interno' 500.
+      if (name.trim().length > 200) {
+        return NextResponse.json(
+          { error: 'Nombre demasiado largo (máx 200 caracteres)' },
+          { status: 400 }
+        )
+      }
       params.push(name.trim())
       setClauses.push(`name = $${params.length}`)
     }
     if (description !== undefined) {
-      if (typeof description !== 'string') {
-        return NextResponse.json({ error: 'Descripción inválida' }, { status: 400 })
+      // Audit 2026-08-14: accept null to CLEAR the description, not 400.
+      if (description !== null && (typeof description !== 'string' || description.length > 5000)) {
+        return NextResponse.json(
+          { error: 'Descripción inválida (string, opcional, máx 5000 caracteres)' },
+          { status: 400 }
+        )
       }
       params.push(description)
       setClauses.push(`description = $${params.length}`)
