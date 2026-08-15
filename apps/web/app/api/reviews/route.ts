@@ -94,9 +94,9 @@ export async function POST(req: NextRequest) {
       }
 
       const result = await client.query(
-        `INSERT INTO reviews (vendor_id, author_name, rating, comment)
-         VALUES ($1, $2, $3, $4) RETURNING *`,
-        [vendor_id, name, rating, comment]
+        `INSERT INTO reviews (vendor_id, author_name, rating, comment, user_id)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [vendor_id, name, rating, comment, auth.userId]
       )
 
       const stats = await client.query(

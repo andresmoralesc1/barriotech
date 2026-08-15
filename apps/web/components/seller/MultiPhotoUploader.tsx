@@ -138,8 +138,19 @@ export function MultiPhotoUploader({ productId, initialPhotos = [], onChange, on
     'Cámara → Formatos → "Más compatible" para tomar fotos en JPEG, o ' +
     'comparte la foto por WhatsApp y súbela desde ahí (se convierte a JPEG).'
 
+  const SIZE_MSG = 'La imagen es demasiado grande. Máximo 10MB.'
+
   const handleFileSelected = async (file: File) => {
     if (uploading) return
+    // Audit 2026-08-14 (M6): pre-check size client-side. ImageUpload
+    // already had this; MultiPhotoUploader missed the cap and uploaded
+    // the full file before getting a 400 from the server. Cap matches
+    // /api/upload route on the server.
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: SIZE_MSG, kind: 'error' })
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
     if (isHeic(file)) {
       toast({ title: HEIC_MSG, kind: 'error' })
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -254,9 +265,13 @@ export function MultiPhotoUploader({ productId, initialPhotos = [], onChange, on
         body: JSON.stringify({ order: next.map((p) => p.id) }),
       })
       if (!res.ok) {
-        // Roll back on failure.
-        setPhotos(photos)
-        onChange?.(photos)
+        // Audit 2026-08-14 (M5): use functional setter to roll back — the
+        // captured `photos` snapshot is stale after the await; the
+        // correct rollback is whatever the last committed state was.
+        setPhotos((prev) => {
+          onChange?.(prev)
+          return prev
+        })
         const data = await res.json().catch(() => ({}))
         toast({ title: data.error || 'No se pudo reordenar', kind: 'error' })
       } else {

@@ -5,6 +5,7 @@ import pool from '@/lib/db'
 import { notify } from '@/lib/push'
 import { requireSameOrigin } from '@/lib/csrf'
 import { checkRateLimitByUser } from '@/lib/rate-limit'
+import { isUuid } from '@/lib/core/utils/slug'
 
 
 // PATCH /api/orders/[id] — change order status (vendor only)
@@ -16,6 +17,11 @@ import { checkRateLimitByUser } from '@/lib/rate-limit'
 export async function PATCH(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
     const csrf = requireSameOrigin(req); if (csrf) return csrf
   const params = await paramsPromise
+  // Audit 2026-08-14: guard malformed UUID before DB so PG 22P02 doesn't
+  // bubble as 500. Same class as the reset-password 500 bug.
+  if (!isUuid(params.id)) {
+    return NextResponse.json({ error: 'ID inválido' }, { status: 400 })
+  }
 
   try {
     const auth = await requireAuth(req)

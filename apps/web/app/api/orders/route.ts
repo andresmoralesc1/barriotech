@@ -128,11 +128,12 @@ export async function POST(req: NextRequest) {
         typeof productId !== 'string' ||
         !isUuid(productId) ||
         typeof quantity !== 'number' ||
+        !Number.isInteger(quantity) ||
         quantity < 1 ||
         quantity > 999
       ) {
         return NextResponse.json(
-          { error: 'Cada item debe tener productId (UUID) y quantity (1-999)' },
+          { error: 'Cada item debe tener productId (UUID) y quantity (1-999, entero)' },
           { status: 400 }
         )
       }
@@ -141,15 +142,33 @@ export async function POST(req: NextRequest) {
     // SECURITY: fetch real prices + validate ownership in one query.
     // We DO NOT trust item.price from the client.
     const productIds = items.map((i) => i.productId as string)
+    // Audit 2026-08-14 (ORD-4): dedupe productIds so legitimate
+    // double-tap (same product twice) doesn't trigger the "product not
+    // found" branch. Old code compared rows.length to productIds.length
+    // and Any() de-duplicates server-side — mismatch gave a misleading
+    // error.
+    const dedupedProductIds = Array.from(new Set(productIds))
     const productsRes = await pool.query(
       `SELECT id, vendor_id, price
        FROM products
        WHERE id = ANY($1::uuid[])`,
-      [productIds]
+      [dedupedProductIds]
     )
 
-    if (productsRes.rows.length !== productIds.length) {
+    if (productsRes.rows.length !== dedupedProductIds.length) {
       return NextResponse.json({ error: 'Uno o más productos no existen' }, { status: 400 })
+    }
+
+    // Audit 2026-08-14 (ORD-5): pre-check vendor existence for a
+    // cleaner error path. Without this, a non-existent vendorId falls
+    // through to the per-product ownership check and returns "no
+    // pertenece al vendedor" — misleading.
+    const vendorCheck = await pool.query(
+      'SELECT id FROM vendors WHERE id = $1 AND deleted_at IS NULL',
+      [vendorId]
+    )
+    if (vendorCheck.rows.length === 0) {
+      return NextResponse.json({ error: 'Vendedor no encontrado' }, { status: 404 })
     }
 
     // Build a price map AND validate ownership

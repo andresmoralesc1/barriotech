@@ -130,6 +130,12 @@ export async function DELETE(req: NextRequest) {
     if (!vendorId) {
       return NextResponse.json({ error: 'vendorId requerido' }, { status: 400 })
     }
+    // Audit 2026-08-14: mirror the POST branch's UUID guard. Without
+    // this, PG throws 22P02 invalid input syntax for type uuid and
+    // bubbles as 500. Same class as the reset-password 500 bug.
+    if (!isUuid(vendorId)) {
+      return NextResponse.json({ error: 'vendorId debe ser un UUID válido' }, { status: 400 })
+    }
 
     const profileIdRes = await pool.query('SELECT id FROM profiles WHERE user_id = $1', [auth.userId])
     if (profileIdRes.rows.length === 0) {

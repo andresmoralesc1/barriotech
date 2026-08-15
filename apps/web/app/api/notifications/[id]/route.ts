@@ -51,9 +51,19 @@ if (!rl.allowed) {
       return NextResponse.json({ error: parsed.error }, { status: 400 })
     }
     const read = parsed.body.read
+    // Audit 2026-08-14: strict boolean check. Old code silently coerced
+    // null/string/0/array to a boolean via !!read. A typo like "yes" was
+    // accepted as true. Match the strict-typed contract used by
+    // products/reviews endpoints.
+    if (read !== undefined && typeof read !== 'boolean') {
+      return NextResponse.json(
+        { error: 'read debe ser booleano (true o false)' },
+        { status: 400 }
+      )
+    }
     const result = await pool.query(
       'UPDATE notifications SET read = $1 WHERE id = $2 RETURNING *',
-      [read !== undefined ? !!read : true, notifId]
+      [read !== undefined ? read : true, notifId]
     )
 
     return NextResponse.json({ notification: result.rows[0] })
