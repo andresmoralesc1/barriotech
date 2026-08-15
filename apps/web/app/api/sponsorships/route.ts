@@ -4,6 +4,7 @@ import pool from '@/lib/db'
 import { requireAuth, requireVerifiedEmail } from '@/lib/auth'
 import { requireSameOrigin } from '@/lib/csrf'
 import { checkRateLimitByUser } from '@/lib/rate-limit'
+import { parseJsonBody } from '@/lib/parse-json'
 
 /**
  * GET  /api/sponsorships          — list current user's sponsorships
@@ -27,9 +28,14 @@ import { checkRateLimitByUser } from '@/lib/rate-limit'
  *   surface that clearly to users (see 503 response below).
  */
 
+// Audit 2026-08-14 (I4): pricing clarified. Previous `20_000_00` /
+// `60_000_00` parsed as 2_000_000 / 6_000_000 cents (COP $20.000 / $60.000)
+// but the underscore placement invited a 100× mis-read. Use grouped
+// literals + a width comment so the next developer copy-pasting into
+// Wompi doesn't ship a 100× charge.
 const PRICING = {
-  semanal:  { days: 7,  amount_cents: 20_000_00 }, // COP 20.000 (stored in cents)
-  mensual:  { days: 30, amount_cents: 60_000_00 },
+  semanal: { days: 7,  amount_cents:  2_000_000 }, // COP $20.000   (2_000_000 cents)
+  mensual: { days: 30, amount_cents:  6_000_000 }, // COP $60.000   (6_000_000 cents)
 }
 
 async function getMyVendorId(req: NextRequest) {
@@ -49,8 +55,9 @@ async function getMyVendorId(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await getMyVendorId(req)
-    if (auth instanceof NextResponse) return auth
+    const vendorRow = await getMyVendorId(req)
+    if (vendorRow instanceof NextResponse) return vendorRow
+    const vendorId = vendorRow.vendorId
 
     const result = await pool.query(
       `SELECT id, plan, amount_cents, starts_at, ends_at, status, created_at
@@ -58,7 +65,7 @@ export async function GET(req: NextRequest) {
        WHERE vendor_id = $1
        ORDER BY created_at DESC
        LIMIT 20`,
-      [auth.vendorId]
+      [vendorId]
     )
 
     const sponsorships = result.rows.map((s) => ({
@@ -80,7 +87,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    const csrf = requireSameOrigin(req); if (csrf) return csrf
+  // Audit 2026-08-14 (I3): swap order so auth runs before CSRF. An
+  // anonymous client should see 401 (no auth), not 403 (CSRF). Clients
+  // distinguish "log in first" from "forbidden" by status code.
+  const auth = await requireAuth(req)
+  if (auth instanceof NextResponse) return auth
+  const userId = auth.userId
+  const csrf = requireSameOrigin(req); if (csrf) return csrf
   // Per-user rate limit on sponsorship creation. 3/min — payments are expensive
   // and bot-driven sponsorship creation could trigger real Wompi charges.
   const rl = await checkRateLimitByUser(req, 'create_sponsorship', 3, 60_000)
@@ -95,6 +108,11 @@ export async function POST(req: NextRequest) {
   // gateway credentials would otherwise create real charges. The check uses
   // VERCEL_ENV (set on Vercel previews) plus an explicit ALLOW_TEST_Sponsorships
   // override for the local dev environment.
+  //
+  // Audit 2026-08-14 (I2): beta-mode gate kept loosely so dev can test,
+  // but never let ENABLE_BETA_SPONSORSHIPS=true skip payment in
+  // production. Without this guard, a misconfigured env var hands out
+  // free 7- or 30-day sponsorships to anyone with a vendor row.
   if (
     process.env.NODE_ENV !== 'production' &&
     process.env.ALLOW_TEST_SPONSORSHIPS !== 'true' &&
@@ -106,11 +124,19 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const auth = await getMyVendorId(req)
-  if (auth instanceof NextResponse) return auth
+  // Audit 2026-08-14 (I3): resolve vendorId once after auth.
+  const vendorRow = await getMyVendorId(req)
+  if (vendorRow instanceof NextResponse) return vendorRow
+  const vendorId = vendorRow.vendorId
 
-  const body = await req.json().catch(() => ({}))
-  const plan = body.plan as 'semanal' | 'mensual' | undefined
+  // Audit 2026-08-14 (I1): use the shared parseJsonBody helper instead of
+  // bare req.json().catch(() => ({})) — matches the rest of the codebase
+  // and returns a clean Spanish error on parse failure.
+  const parsed = await parseJsonBody<{ plan?: string }>(req)
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 })
+  }
+  const plan = parsed.body.plan as 'semanal' | 'mensual' | undefined
 
   if (!plan || !(plan in PRICING)) {
     return NextResponse.json(
@@ -123,19 +149,36 @@ export async function POST(req: NextRequest) {
 
   // Don't allow stacking — if there's an active sponsorship, reject.
   // (We could allow renewals that extend the window; deferred for v2.)
-  // Wrap in a transaction with the INSERT below to prevent races where two
-  // simultaneous POSTs both pass the check and create two active sponsorships.
+  //
+  // Audit 2026-08-14 (C1): lock the VENDOR row, not the (possibly
+  // missing) sponsorship row. The previous `SELECT … FOR UPDATE` on
+  // sponsorships returned zero rows when no active sponsorship existed,
+  // which acquired no lock — two concurrent POSTs both passed the check
+  // and both INSERTed. Migration 039 adds a partial UNIQUE on
+  // (vendor_id) WHERE status IN ('active','pending_payment') as
+  // belt-and-suspenders DB-level enforcement.
   const client = await pool.connect()
   let insertedRow: unknown = null
   try {
     await client.query('BEGIN')
 
+    // Lock the vendor row. Concurrent POSTs for the same vendor
+    // serialize at this point; the active-sponsorship check below
+    // becomes a single-writer operation.
+    const vendorLock = await client.query(
+      'SELECT id FROM vendors WHERE id = $1 FOR UPDATE',
+      [vendorId]
+    )
+    if (vendorLock.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return NextResponse.json({ error: 'Vendedor no encontrado' }, { status: 404 })
+    }
+
     const activeResult = await client.query(
       `SELECT id, ends_at FROM sponsorships
        WHERE vendor_id = $1 AND status = 'active' AND ends_at > NOW()
-       LIMIT 1
-       FOR UPDATE`,
-      [auth.vendorId]
+       LIMIT 1`,
+      [vendorId]
     )
 
     if (activeResult.rows.length > 0) {
@@ -178,7 +221,7 @@ export async function POST(req: NextRequest) {
       `INSERT INTO sponsorships (vendor_id, plan, amount_cents, ends_at, status)
        VALUES ($1, $2, $3, NOW() + ($4 || ' days')::INTERVAL, 'active')
        RETURNING id, plan, amount_cents, starts_at, ends_at, status`,
-      [auth.vendorId, plan, config.amount_cents, config.days]
+      [vendorId, plan, config.amount_cents, config.days]
     )
     insertedRow = insertResult.rows[0] // beta path: status='active'
 

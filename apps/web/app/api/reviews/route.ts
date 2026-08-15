@@ -143,7 +143,10 @@ export async function GET(req: NextRequest) {
       query += ` AND vendor_id = $${params.length}`
     }
 
-    query += ' ORDER BY created_at DESC LIMIT 50'
+    // Audit 2026-08-14 (PERF-5): pagination. Default 10, max 50.
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '10', 10) || 10, 1), 50)
+    const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0)
+    query += ` ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`
 
     const result = await pool.query(query, params)
     return NextResponse.json({ reviews: result.rows })

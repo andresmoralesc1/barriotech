@@ -61,43 +61,38 @@ export async function GET(req: NextRequest, context: RouteContext) {
     // over-engineering without a written privacy analysis. If a vendor
     // doesn't want to be reached, they leave `phone` NULL at registration.
 
-    // Fetch products
-    const productsResult = await pool.query(
-      'SELECT * FROM products WHERE vendor_id = $1 ORDER BY created_at DESC',
-      [vendorId]
-    )
+    // Fetch products + reviews in parallel (audit 2026-08-14 PERF-2).
+    // Was 5 sequential await → 3 rounds. vendor_views INSERT stays
+    // fire-and-forget so it doesn't block the response.
+    const [productsResult, reviewsResult] = await Promise.all([
+      pool.query(
+        'SELECT * FROM products WHERE vendor_id = $1 ORDER BY created_at DESC',
+        [vendorId]
+      ),
+      pool.query(
+        'SELECT * FROM reviews WHERE vendor_id = $1 ORDER BY created_at DESC',
+        [vendorId]
+      ),
+    ])
 
-    // Fetch reviews
-    const reviewsResult = await pool.query(
-      'SELECT * FROM reviews WHERE vendor_id = $1 ORDER BY created_at DESC',
-      [vendorId]
-    )
-
-    // Track view — gated on consent to comply with Ley 1581/2012 (Colombia).
-    // Only logged-in users who have recorded consent via /api/consent are
-    // persisted; anonymous visits are not stored.
-    try {
-      const token = getTokenFromRequest(req)
-      let userId: string | null = null
-      let hasConsent = false
-      if (token) {
-        const decoded = await verifyToken(token)
-        if (decoded) {
-          userId = decoded.userId
-          const consentRes = await pool.query(
-            'SELECT 1 FROM consent_logs WHERE user_id = $1 LIMIT 1',
-            [userId]
-          )
-          hasConsent = consentRes.rows.length > 0
-        }
-      }
-      if (userId && hasConsent) {
-        await pool.query(
-          'INSERT INTO vendor_views (vendor_id, user_id) VALUES ($1, $2)',
-          [vendorId, userId]
-        )
-      }
-    } catch {}
+    // Audit 2026-08-14 (PERF-4 / I4): vendor_views INSERT is now
+    // fire-and-forget. Don't block the response on analytics writes
+    // (was I4 from the perf audit). The .catch logs nothing —
+    // analytics loss is acceptable for this single insert.
+    const token = getTokenFromRequest(req)
+    if (token) {
+      verifyToken(token).then((decoded) => {
+        if (!decoded) return
+        return pool.query('SELECT 1 FROM consent_logs WHERE user_id = $1 LIMIT 1', [decoded.userId])
+          .then((consentRes) => {
+            if (consentRes.rows.length === 0) return
+            return pool.query(
+              'INSERT INTO vendor_views (vendor_id, user_id) VALUES ($1, $2)',
+              [vendorId, decoded.userId]
+            )
+          })
+      }).catch(() => {})
+    }
 
     const reviews = reviewsResult.rows
     const avgRating = reviews.length > 0
@@ -144,8 +139,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
       sponsoredUntil: vendorRow.sponsored_until,
       rating: avgRating,
       reviewCount: reviews.length,
-      latitude: vendorRow.latitude,
-      longitude: vendorRow.longitude,
+      latitude: vendorRow.latitude != null ? Math.round(vendorRow.latitude * 1e6) / 1e6 : null,
+      longitude: vendorRow.longitude != null ? Math.round(vendorRow.longitude * 1e6) / 1e6 : null,
       cityId: vendorRow.city_id,
       createdAt: vendorRow.created_at,
       locationUpdatedAt: vendorRow.location_updated_at,

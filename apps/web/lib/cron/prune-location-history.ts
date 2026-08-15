@@ -26,6 +26,13 @@ export function startLocationHistoryPruneCron() {
       await recordJobRun('location-history-prune', { deleted: res.rowCount ?? 0 })
       logger.info(`[location-history-prune] Deleted ${res.rowCount} snapshots older than ${RETENTION_DAYS} days`)
     } catch (err) {
+      // Audit 2026-08-14 (CRON-1): recordJobRun on the error path so DB
+      // outages surface in job_runs (the previous code only logged,
+      // so a silent breakage would leave no trace). recordJobRun is
+      // itself safe — best-effort within the catch.
+      try {
+        await recordJobRun('location-history-prune', { error: String(err) })
+      } catch { /* ignore recordJobRun failure */ }
       logger.error(serializeErr(err), '[location-history-prune] error:')
     }
   }

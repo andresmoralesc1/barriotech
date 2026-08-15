@@ -322,18 +322,22 @@ export const useStore = create<AppState>()(
         // Signal that hydration is in progress — components should wait
         state.setHasHydrated(false)
 
-        // After rehydrating from localStorage, check if user is logged in via cookie
-        // This handles page refreshes and direct navigation after login.
-        // Optimization: short-circuit if there is no auth cookie. Without
-        // this, every anonymous session fires a 401 against /api/auth/me
-        // on every page load — noisy console + wasted round-trip. We check
-        // for the cookie first; if absent, the user is definitely
-        // logged out and the API call is guaranteed to 401.
-        // Audit 2026-08-14: cookie check was `gps_session` — the OLD cookie
-        // name from before the auth refactor. Current cookies are `token`
-        // and `refresh-token`. The old check always returned false, so
-        // the /api/auth/me short-circuit never fired and every anonymous
-        // session was making a wasted round-trip.
+        // Skip the /api/auth/me fetch when rehydrating already populated
+        // the user from localStorage. Audit 2026-08-14 (PERF-6 I1): the
+        // original code fired /api/auth/me on EVERY page load for
+        // authenticated users — 1 RTT + 1 DB query per navigation, even
+        // though the localStorage state already has the user. The cookie
+        // short-circuit handles anonymous users; this one handles the
+        // logged-in case where state.user is already populated.
+        if (state.user) {
+          state.setHasHydrated(true)
+          return
+        }
+        // No cached user. Check the cookie before fetching — if absent
+        // the user is definitely logged out and the API call is
+        // guaranteed to 401. Audit 2026-08-14: cookie check was
+        // `gps_session` (the OLD cookie name from before the auth
+        // refactor). Current cookies are `token` and `refresh-token`.
         if (typeof document === 'undefined' || !document.cookie.match(/(?:^|;\s*)(?:token|refresh-token)=/)) {
           state.setHasHydrated(true)
           return

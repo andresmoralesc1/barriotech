@@ -397,7 +397,7 @@ export async function POST(req: NextRequest) {
     })
 
     const isProd = process.env.NODE_ENV === 'production'
-    response.cookies.set('token', token, {
+    response.cookies.set('__Host-token', token, {
       httpOnly: true,
       // L1 (audit 2026-07-27): scope to /api/auth.
       path: AUTH_COOKIE_PATH,
@@ -405,7 +405,7 @@ export async function POST(req: NextRequest) {
       sameSite: 'strict',
       secure: isProd,
     })
-    response.cookies.set('refresh-token', refreshToken, {
+    response.cookies.set('__Host-refresh-token', refreshToken, {
       httpOnly: true,
       path: AUTH_COOKIE_PATH,
       maxAge: 60 * 60 * 24 * 7,

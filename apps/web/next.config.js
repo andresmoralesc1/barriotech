@@ -117,7 +117,7 @@ const nextConfig = {
       `script-src 'self' 'unsafe-inline' https://umami.andresmorales.com.co`, // Next.js hydration + Umami analytics
       `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`, // Tailwind + Google Fonts CSS
       `style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com`,
-      `img-src 'self' data: blob: https:`, // Supabase storage + user uploads + external product photos
+      `img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in https://images.pexels.com https://barriotech.com.co https://andresmorales.com.co`, // Audit 2026-08-14 (SEC-1 I-1): was `https:` wildcard — any HTTPS image could be loaded via XSS. Restricted to known hosts.
       `font-src 'self' data: https://fonts.gstatic.com`, // Google Fonts files
       `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://fonts.googleapis.com https://umami.andresmorales.com.co`,
       `worker-src 'self'`, // service worker for push notifications

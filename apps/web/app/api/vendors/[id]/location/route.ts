@@ -56,27 +56,46 @@ export async function PUT(req: NextRequest, { params: paramsPromise }: { params:
     }
 
     const parsed = await parseJsonBody<{
-      latitude?: string | number | null;
-      longitude?: string | number | null;
+      latitude?: number | null;
+      longitude?: number | null;
       isActive?: boolean;
     }>(req)
     if (!parsed.ok) {
       return NextResponse.json({ error: parsed.error }, { status: 400 })
     }
     const { latitude, longitude, isActive } = parsed.body
-    const latStr = latitude != null ? String(latitude) : null
-    const lngStr = longitude != null ? String(longitude) : null
+
+    // Audit 2026-08-14 (MAP-1): strict numeric coercion. The previous
+    // `parseFloat(String(lat))` accepted arrays (String([4.6])='4.6')
+    // and objects, letting bypass malformed coordinates past the
+    // "Coordenadas fuera de Colombia" guard. Match the sibling
+    // /me/location route — typeof check first, then Number.isFinite.
+    let lat: number | null = null
+    let lng: number | null = null
+    if (latitude != null || longitude != null) {
+      if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+        return NextResponse.json(
+          { error: 'latitude y longitude deben ser números' },
+          { status: 400 }
+        )
+      }
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        return NextResponse.json(
+          { error: 'latitude y longitude deben ser números finitos' },
+          { status: 400 }
+        )
+      }
+      if (latitude < -4.2 || latitude > 13.5 || longitude < -79.1 || longitude > -66.9) {
+        return NextResponse.json({ error: 'Coordenadas fuera de Colombia' }, { status: 400 })
+      }
+      lat = Math.round(latitude * 1e6) / 1e6 // Audit 2026-08-14 (MAP-2): quantize to 11cm
+      lng = Math.round(longitude * 1e6) / 1e6
+    }
 
     const updates: string[] = []
     const paramsList: unknown[] = []
 
-    if (latStr != null && lngStr != null) {
-      // Validate coordinates for Colombia
-      const lat = parseFloat(latStr)
-      const lng = parseFloat(lngStr)
-      if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -4.2 || lat > 13.5 || lng < -79.1 || lng > -66.9) {
-        return NextResponse.json({ error: 'Coordenadas fuera de Colombia' }, { status: 400 })
-      }
+    if (lat != null && lng != null) {
       paramsList.push(lat, lng)
       updates.push(`latitude = $1, longitude = $2, location_updated_at = NOW()`)
     }
@@ -93,11 +112,7 @@ export async function PUT(req: NextRequest, { params: paramsPromise }: { params:
     // Snapshot GPS only when transitioning to active OR every 10s while active.
     // We write to history inside the same transaction so partial failures
     // don't leave the live `vendors` row out of sync with history.
-    const wantsHistoryWrite =
-      latStr != null && lngStr != null &&
-      Number.isFinite(parseFloat(latStr)) && Number.isFinite(parseFloat(lngStr)) &&
-      parseFloat(latStr) >= -4.2 && parseFloat(latStr) <= 13.5 &&
-      parseFloat(lngStr) >= -79.1 && parseFloat(lngStr) <= -66.9
+    const wantsHistoryWrite = lat != null && lng != null
 
 const client = await pool.connect()
   let updated: unknown = null
@@ -132,8 +147,7 @@ const client = await pool.connect()
     // Only insert when the vendor is currently active to avoid logging
     // location while the seller is offline.
     if (wantsHistoryWrite && updatedRow?.is_active) {
-      const lat = parseFloat(latStr as string)
-      const lng = parseFloat(lngStr as string)
+      // lat/lng already validated + quantized above (audit 2026-08-14 MAP-1/2).
       await client.query(
         `INSERT INTO vendor_location_history (vendor_id, latitude, longitude)
          VALUES ($1, $2, $3)`,

@@ -1,4 +1,4 @@
-import { startBusinessHoursCron } from '@/lib/cron/business-hours'
+import { startBusinessHoursCron, stopBusinessHoursCron } from '@/lib/cron/business-hours'
 import { startLocationHistoryPruneCron, stopLocationHistoryPruneCron } from '@/lib/cron/prune-location-history'
 import { startEmailTokenPruneCron, stopEmailTokenPruneCron } from '@/lib/cron/prune-email-tokens'
 
@@ -15,7 +15,8 @@ export function startCrons() {
 }
 
 export function stopCrons() {
-  // Future: wire stopBusinessHoursCron() when it becomes stateful.
+  // Audit 2026-08-14 (CRON-2): stopBusinessHoursCron now wired up.
+  stopBusinessHoursCron()
   stopLocationHistoryPruneCron()
   stopEmailTokenPruneCron()
 }

@@ -44,6 +44,12 @@ export function startEmailTokenPruneCron() {
           `${resetRes.rowCount} reset tokens older than ${RETENTION_DAYS}d past expiry/use`,
       )
     } catch (err) {
+      // Audit 2026-08-14 (CRON-1): recordJobRun on the error path so DB
+      // outages surface in job_runs (the previous code only logged,
+      // so a silent breakage would leave no trace).
+      try {
+        await recordJobRun('email-token-prune', { error: String(err) })
+      } catch { /* ignore recordJobRun failure */ }
       logger.error(serializeErr(err), '[email-token-prune] error:')
     }
   }

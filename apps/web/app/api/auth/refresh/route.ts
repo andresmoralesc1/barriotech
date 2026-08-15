@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
     })
 
     const isProd = process.env.NODE_ENV === 'production'
-    response.cookies.set('token', freshAccessToken, {
+    response.cookies.set('__Host-token', freshAccessToken, {
       httpOnly: true,
       secure: isProd,
       // S3-SEC-3 (audit 2026-07-23): changed SameSite from 'lax' to 'strict'.
@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
     // rotated token. The browser overwrites the existing cookie in
     // place (same name + path + maxAge); the OLD refresh token is now
     // unusable because its embedded version no longer matches.
-    response.cookies.set('refresh-token', freshRefreshToken, {
+    response.cookies.set('__Host-refresh-token', freshRefreshToken, {
       httpOnly: true,
       secure: isProd,
       sameSite: 'strict',

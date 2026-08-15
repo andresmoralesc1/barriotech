@@ -122,8 +122,15 @@ export async function GET(req: NextRequest) {
 
     // Public view: hide drafts. Sellers viewing their own catalogue
     // (?includeDrafts=true) see everything.
+    //
+    // Audit 2026-08-14 (PERF-1): was bare `is_active`. products + vendors
+    // both have an is_active column, so the unqualified reference raises
+    // `column reference is ambiguous` (sqlstate 42702) and the GET
+    // returned 500. Qualify with `p.is_active` — the products.is_active
+    // is the gate we want (the vendors.is_active is already in the JOIN
+    // clause above).
     if (!includeDrafts) {
-      query += ' AND is_active = true'
+      query += ' AND p.is_active = true'
     }
 
     // Full-text search across name + description. Uses the GIN index on
@@ -137,7 +144,11 @@ export async function GET(req: NextRequest) {
       query += ` AND to_tsvector('spanish', coalesce(name, '') || ' ' || coalesce(description, '')) @@ plainto_tsquery('spanish', $${params.length})`
     }
 
-    query += ' ORDER BY created_at DESC LIMIT 200'
+    // Audit 2026-08-14 (PERF-5): bounded pagination. Default 20, max 100.
+    // ?limit=&offset= lets clients page through historical products.
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '20', 10) || 20, 1), 100)
+    const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0)
+    query += ` ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`
 
     const result = await pool.query(query, params)
     return NextResponse.json({ products: result.rows })

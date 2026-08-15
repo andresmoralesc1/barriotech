@@ -8,7 +8,7 @@ import { AUTH_COOKIE_PATH } from '@/lib/auth-cookies'
 
 function clearCookies(response: NextResponse) {
   const isProd = process.env.NODE_ENV === 'production'
-  response.cookies.set('token', '', {
+  response.cookies.set('__Host-token', '', {
     httpOnly: true,
     // L1 (audit 2026-07-27): must match the issuing path. With
     // AUTH_COOKIE_PATH = '/', the cookie set by /login lives at '/'.
@@ -20,7 +20,7 @@ function clearCookies(response: NextResponse) {
     sameSite: 'strict', // S3-SEC-3 (audit 2026-07-23)
     secure: isProd,
   })
-  response.cookies.set('refresh-token', '', {
+  response.cookies.set('__Host-refresh-token', '', {
     httpOnly: true,
     path: AUTH_COOKIE_PATH,
     maxAge: 0,

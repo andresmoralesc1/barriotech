@@ -41,12 +41,26 @@ async function run() {
   }
 }
 
+// Audit 2026-08-14 (CRON-2): timer handle moved to module scope so
+// stopBusinessHoursCron() can clear it. The previous "Future: wire
+// stopBusinessHoursCron() when it becomes stateful" comment is now
+// resolved.
+let timer: NodeJS.Timeout | null = null
+
 export function startBusinessHoursCron() {
   if (process.env.NODE_ENV !== 'production') return
   // Run every 5 minutes. Skip when running in build context.
   if (process.env.NEXT_PHASE === 'phase-production-build') return
-  const interval = setInterval(run, 5 * 60 * 1000)
+  if (timer) return // already scheduled
+  timer = setInterval(run, 5 * 60 * 1000)
   // Don't keep the process alive just for this timer.
-  if (typeof interval.unref === 'function') interval.unref()
+  if (typeof timer.unref === 'function') timer.unref()
   logger.info('[business-hours] Cron scheduled (every 5 min)')
+}
+
+export function stopBusinessHoursCron() {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
 }

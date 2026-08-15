@@ -40,38 +40,37 @@ export async function GET(req: NextRequest) {
   const limitIdx = filterArgs.length + 1
   const offsetIdx = filterArgs.length + 2
 
+  // Audit 2026-08-14 (PERF-3): replace per-row LATERAL with a pre-
+  // aggregated CTE. The LATERAL ran once per vendor row (O(N) per query).
+  // The CTE groups once, joins as a regular hash lookup. At 200 vendors
+  // this drops from ~200 subqueries to 1 group by.
   const query = `
+    WITH product_aggregates AS (
+      SELECT vendor_id,
+             COUNT(*) FILTER (WHERE kind = 'service' AND is_active)::int AS service_count,
+             COUNT(*) FILTER (WHERE kind = 'product' AND is_active)::int AS product_count,
+             bool_or(modality = 'travels' AND is_active AND kind = 'service') AS has_travels
+      FROM products
+      WHERE is_active = true
+      GROUP BY vendor_id
+    )
     SELECT v.*, c.label AS category_label,
-           -- Migration 102 Phase B: service-side aggregates so the
-           -- map popup can render "A domicilio" / "X servicios" / "3
-           -- productos" without an extra /api/vendors/[id] round-trip.
-           -- The correlated subqueries hit idx_products_vendor_id
-           -- (one per vendor row in the result set — fine for the
-           -- ≤500-vendor cap). A LEFT JOIN + GROUP BY would be cheaper
-           -- but would require restructuring the list + count queries
-           -- to share an aggregate and would break the existing view.
-           COALESCE(svc.service_count, 0)::int AS service_count,
-           COALESCE(svc.product_count, 0)::int AS product_count,
-           COALESCE(svc.has_travels, false) AS has_travels
+           COALESCE(a.service_count, 0)::int AS service_count,
+           COALESCE(a.product_count, 0)::int AS product_count,
+           COALESCE(a.has_travels, false) AS has_travels
     FROM vendors_with_sponsorship v
     LEFT JOIN categories c ON v.category = c.id
-    LEFT JOIN LATERAL (
-      SELECT
-        COUNT(*) FILTER (WHERE p.kind = 'service' AND p.is_active)::int AS service_count,
-        COUNT(*) FILTER (WHERE p.kind = 'product' AND p.is_active)::int AS product_count,
-        bool_or(p.modality = 'travels' AND p.is_active AND p.kind = 'service') AS has_travels
-      FROM products p
-      WHERE p.vendor_id = v.id
-    ) svc ON true
+    LEFT JOIN product_aggregates a ON a.vendor_id = v.id
     WHERE 1=1 ${filterWhere}
     ORDER BY v.is_sponsored DESC, COALESCE(v.location_updated_at, v.created_at) DESC
     LIMIT $${limitIdx} OFFSET $${offsetIdx}
   `
-  const result = await pool.query(query, [...filterArgs, limit, offset])
+  const [result, adsResult] = await Promise.all([
+    pool.query(query, [...filterArgs, limit, offset]),
     // ads is a VIEW (see migrations/014_ads_view_and_seed.sql) backed by
     // ad_campaigns. Window filter is applied here, not in the view, so admin
     // tooling can still SELECT paused/expired rows.
-    const adsResult = await pool.query(`
+    pool.query(`
       SELECT id, brand_name, image_url, target_url
       FROM ads
       WHERE is_active = true
@@ -79,7 +78,8 @@ export async function GET(req: NextRequest) {
         AND (ends_at IS NULL OR ends_at >= NOW())
       ORDER BY priority DESC, created_at DESC
       LIMIT 5
-    `)
+    `),
+  ])
     const ads = adsResult.rows.map((a) => ({
       id: a.id,
       brandName: a.brand_name,
@@ -132,8 +132,8 @@ export async function GET(req: NextRequest) {
         description: v.description,
         category: v.category,
         categoryLabel: v.category_label,
-        latitude: v.latitude,
-        longitude: v.longitude,
+        latitude: v.latitude != null ? Math.round(v.latitude * 1e6) / 1e6 : null,
+        longitude: v.longitude != null ? Math.round(v.longitude * 1e6) / 1e6 : null,
         isActive: Boolean(v.is_active),
         locationFresh,
         locationUpdatedAt: v.location_updated_at,
@@ -486,8 +486,8 @@ if (!rl.allowed) {
           category: v.category,
           description: v.description,
           cityId: v.city_id,
-          latitude: v.latitude,
-          longitude: v.longitude,
+          latitude: v.latitude != null ? Math.round(v.latitude * 1e6) / 1e6 : null,
+          longitude: v.longitude != null ? Math.round(v.longitude * 1e6) / 1e6 : null,
           stationType: v.station_type,
           phone: v.phone,
           isActive: v.is_active,
