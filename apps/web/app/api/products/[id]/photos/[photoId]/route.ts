@@ -46,6 +46,7 @@ if (!rl.allowed) {
     const ownerCheck = await pool.query(
       `SELECT p.id FROM products p
        JOIN vendors v ON v.id = p.vendor_id
+       AND v.deleted_at IS NULL
        WHERE p.id = $1 AND v.profile_id IN (SELECT id FROM profiles WHERE user_id = $2)`,
       [params.id, auth.userId]
     )

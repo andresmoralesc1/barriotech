@@ -216,12 +216,15 @@ export async function POST(req: NextRequest) {
       if (typeof rawPhotoUrl !== 'string') {
         return NextResponse.json({ error: 'photo_url inválido' }, { status: 400 })
       }
-      // Audit 2026-08-14: same ^https?:// check the PATCH handler uses.
-      // Without this, javascript:/data:/vbscript: payloads hit the
-      // products_photo_url_format DB CHECK and bubble up as 500.
-      if (!/^https?:\/\//i.test(rawPhotoUrl.trim())) {
+      // Audit 2026-08-14: regex matches the DB CHECK on products.photo_url
+      // (https?:// or /products/ or /storage/). Without this, javascript:/
+      // data:/vbscript: payloads hit the products_photo_url_format DB
+      // CHECK and bubble up as 500. Also includes /products/ and /storage/
+      // so the POST is consistent with the photos POST route.
+      const PRODUCT_URL_RE = /^https?:\/\/[^\s]{1,2048}$|^\/(products|storage)\/[^\s\\]{0,2047}$/
+      if (!PRODUCT_URL_RE.test(rawPhotoUrl.trim())) {
         return NextResponse.json(
-          { error: 'photo_url debe empezar con http:// o https://' },
+          { error: 'photo_url debe empezar con http(s)://, /products/, o /storage/' },
           { status: 400 }
         )
       }
@@ -260,6 +263,23 @@ export async function POST(req: NextRequest) {
       pricing_unit = parsed.fields.pricing_unit
     }
 
+    // Audit 2026-08-14 (PR-I5): if kind=product but the body also
+    // contains service fields, reject with 400. Without this, the values
+    // are silently discarded — the seller thinks they configured a
+    // service and the server stores a product. Surface the contract.
+    if (kind === 'product') {
+      if (
+        body.duration_minutes !== undefined ||
+        body.modality !== undefined ||
+        body.pricing_unit !== undefined
+      ) {
+        return NextResponse.json(
+          { error: 'Un producto no puede tener campos de servicio (duration_minutes, modality, pricing_unit). Crea una oferta de servicio separada.' },
+          { status: 400 }
+        )
+      }
+    }
+
     let vendorId: string | null = null
     if (rawVendorId !== undefined && rawVendorId !== null && rawVendorId !== '') {
       if (typeof rawVendorId !== 'string' || !UUID_RE.test(rawVendorId)) {
@@ -294,16 +314,44 @@ export async function POST(req: NextRequest) {
     // immediately see the publish state of the new product. New products
     // default to is_active = true (column default). Migration 102 adds
     // the kind discriminator + service fields.
+    // Audit 2026-08-14 (PR-I6): honor isActive=false in the create body so
+    // a seller can immediately create a draft. Sprint 6 D.1 added this
+    // for PATCH but POST silently dropped it. Strict boolean — anything
+    // other than a real boolean is rejected (typo like "true" doesn't
+    // silently fall back to either value).
+    const rawIsActive = body.isActive !== undefined ? body.isActive : body.is_active
+    let isActiveValue: boolean | null = null
+    if (rawIsActive !== undefined) {
+      if (typeof rawIsActive !== 'boolean') {
+        return NextResponse.json(
+          { error: 'isActive debe ser booleano (true o false)' },
+          { status: 400 }
+        )
+      }
+      isActiveValue = rawIsActive
+    }
+
+    // Sprint 6 D.1: RETURNING includes is_active so the seller can
+    // immediately see the publish state of the new product. New products
+    // default to is_active = true (column default) unless the body
+    // explicitly sets isActive. Migration 102 adds the kind discriminator
+    // + service fields.
+    const insertColumns = ['vendor_id', 'name', 'description', 'price', 'photo_url', 'kind', 'duration_minutes', 'modality', 'pricing_unit']
+    const insertValues: unknown[] = [vendorId, name, description, priceNum, photo_url, kind, duration_minutes, modality, pricing_unit]
+    if (isActiveValue !== null) {
+      insertColumns.push('is_active')
+      insertValues.push(isActiveValue)
+    }
+    const placeholders = insertValues.map((_, i) => `$${i + 1}`).join(', ')
+    const columnList = insertColumns.join(', ')
+
     const result = await pool.query(
-      `INSERT INTO products
-         (vendor_id, name, description, price, photo_url,
-          kind, duration_minutes, modality, pricing_unit)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO products (${columnList})
+       VALUES (${placeholders})
        RETURNING id, vendor_id, name, description, price, photo_url,
                  is_active, kind, duration_minutes, modality, pricing_unit,
                  created_at`,
-      [vendorId, name, description, priceNum, photo_url,
-       kind, duration_minutes, modality, pricing_unit]
+      insertValues
     )
 
     return NextResponse.json({ product: result.rows[0] }, { status: 201 })

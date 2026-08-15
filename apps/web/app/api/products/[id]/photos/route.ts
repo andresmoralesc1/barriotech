@@ -8,8 +8,13 @@ import { checkRateLimitByUser } from '@/lib/rate-limit'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// Accept absolute http(s) URLs OR relative paths starting with `/`.
-const URL_RE = /^https?:\/\/[^\s]{1,2048}$|^\/[^\s\\]{0,2047}$/
+// Audit 2026-08-14 (IM-U-I1): tightened to match the DB CHECK on
+// product_photos.url (https?://, /products/, /storage/). Previous
+// regex `^\/[^\s\\]{0,2047}$` accepted any /anything path —
+// /etc/passwd, /admin/whatever, /api/... — and the DB CHECK would
+// 500 on the catch (sqlstate 22023 → 'Error interno'). Same regex
+// shape as the products POST uses for photo_url.
+const URL_RE = /^https?:\/\/[^\s]{1,2048}$|^\/(products|storage)\/[^\s\\]{0,2047}$/
 
 const MAX_PHOTOS_PER_PRODUCT = 6
 
@@ -74,6 +79,7 @@ export async function POST(
     const ownerCheck = await pool.query(
       `SELECT p.id FROM products p
        JOIN vendors v ON v.id = p.vendor_id
+       AND v.deleted_at IS NULL
        WHERE p.id = $1 AND v.profile_id IN (SELECT id FROM profiles WHERE user_id = $2)`,
       [params.id, auth.userId]
     )
@@ -154,6 +160,7 @@ export async function DELETE(req: NextRequest, { params: paramsPromise }: { para
     const ownerCheck = await pool.query(
       `SELECT p.id FROM products p
        JOIN vendors v ON v.id = p.vendor_id
+       AND v.deleted_at IS NULL
        WHERE p.id = $1 AND v.profile_id IN (SELECT id FROM profiles WHERE user_id = $2)`,
       [params.id, auth.userId]
     )
@@ -230,6 +237,7 @@ export async function PATCH(req: NextRequest, { params: paramsPromise }: { param
     const ownerCheck = await pool.query(
       `SELECT p.id FROM products p
        JOIN vendors v ON v.id = p.vendor_id
+       AND v.deleted_at IS NULL
        WHERE p.id = $1 AND v.profile_id IN (SELECT id FROM profiles WHERE user_id = $2)`,
       [params.id, auth.userId]
     )

@@ -6,6 +6,7 @@ import { COLOMBIA_CITIES } from '@/lib/core/constants/cities'
 import { requireSameOrigin } from '@/lib/csrf'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { getClientIp } from '@/lib/trusted-ip'
+import { parseJsonBody } from '@/lib/parse-json'
 
 const VALID_CITY_IDS = new Set(COLOMBIA_CITIES.map((c) => c.id))
 
@@ -179,12 +180,13 @@ export async function PATCH(req: NextRequest) {
     const url = new URL(req.url)
     const requestedVendorId = url.searchParams.get('vendorId')
 
-    let body: Record<string, unknown>
-    try {
-      body = await req.json()
-    } catch {
-      return NextResponse.json({ error: 'Body JSON inválido' }, { status: 400 })
+    // Audit 2026-08-14 (IM-U-I2): use parseJsonBody instead of bare req.json().
+    // Matches the rest of the codebase after the reset-password fix.
+    const parsed = await parseJsonBody<Record<string, unknown>>(req)
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 })
     }
+    const body = parsed.body
 
     // CRIT-18: validate city_id against the canonical list. Prevents typos or
     // missing values that would silently leave a vendor out of every city's

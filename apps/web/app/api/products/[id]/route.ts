@@ -51,6 +51,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     const check = await pool.query(
       `SELECT p.id FROM products p
        JOIN vendors v ON v.id = p.vendor_id
+       AND v.deleted_at IS NULL
        JOIN profiles pr ON pr.id = v.profile_id
        WHERE p.id = $1 AND pr.user_id = $2`,
       [productId, auth.userId]
@@ -210,6 +211,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     const check = await pool.query(
       `SELECT p.id FROM products p
        JOIN vendors v ON v.id = p.vendor_id
+       AND v.deleted_at IS NULL
        JOIN profiles pr ON pr.id = v.profile_id
        WHERE p.id = $1 AND pr.user_id = $2`,
       [productId, auth.userId]
