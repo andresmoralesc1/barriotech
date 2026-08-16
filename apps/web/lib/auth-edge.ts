@@ -94,5 +94,5 @@ async function verifyTokenWithIatCheck(
 export function getTokenFromRequest(req: NextRequest): string | null {
   const auth = req.headers.get('authorization')
   if (auth?.startsWith('Bearer ')) return auth.slice(7)
-  return req.cookies.get('token')?.value || null
+  return req.cookies.get('__Host-token')?.value || null
 }

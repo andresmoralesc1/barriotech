@@ -238,7 +238,7 @@ function extractUserIdFromCookie(req: {
   cookies?: { get(name: string): { value: string } | undefined }
 }): string | null {
   try {
-    const tokenCookie = req.cookies?.get?.('token')
+    const tokenCookie = req.cookies?.get?.('__Host-token')
     if (!tokenCookie?.value) return null
     const parts = tokenCookie.value.split('.')
     if (parts.length !== 3) return null

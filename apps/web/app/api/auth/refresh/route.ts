@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   try {
     // Try access token first, fall back to refresh-token cookie.
     const accessToken = getTokenFromRequest(req)
-    const refreshToken = req.cookies.get('refresh-token')?.value || null
+    const refreshToken = req.cookies.get('__Host-refresh-token')?.value || null
     const token = accessToken || refreshToken
 
     if (!token) {

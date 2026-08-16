@@ -27,7 +27,7 @@ import { AdminPanel } from './admin-panel'
 
 export default async function AdminPage() {
   const cookieStore = await cookies()
-  const token = cookieStore.get('token')?.value
+  const token = cookieStore.get('__Host-token')?.value
   if (!token) redirect('/login?next=/admin')
 
   const decoded = await verifyTokenEdge(token)
